@@ -5,3 +5,5 @@ google-cloud-texttospeech==2.14.1
 google-cloud-translate==3.11.1
 requests==2.31.0
 gunicorn==21.2.0
+setuptools>=65.0.0
+wheel>=0.38.0
