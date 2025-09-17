@@ -259,6 +259,11 @@ async def twilio_websocket(websocket, path):
 # Flask app for HTTP webhooks
 app = Flask(__name__)
 
+@app.route('/health')
+def health_check():
+    """Health check endpoint for Railway"""
+    return {"status": "healthy", "service": "twilio-voice-translator"}, 200
+
 @app.route('/twilio-webhook', methods=['POST'])
 def twilio_webhook():
     """Handle incoming Twilio calls"""
@@ -343,6 +348,10 @@ async def start_servers():
 
 if __name__ == "__main__":
     try:
+        # Get port from Railway environment variable
+        port = int(os.environ.get('PORT', 3000))
+        print(f"Starting Railway deployment on port {port}")
+        
         asyncio.get_event_loop().run_until_complete(start_servers())
         asyncio.get_event_loop().run_forever()
     except KeyboardInterrupt:
