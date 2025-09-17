@@ -1,0 +1,11 @@
+version: "2"
+authtoken: 2kbqg1tIJDQLUUMFtbaZjAoIBmE_5oiEL8TPXT1WjZjirBCUt
+tunnels:
+  flask:
+    proto: http
+    addr: 3000
+    hostname: 364c248cb38f.ngrok-free.app
+  websocket:
+    proto: http
+    addr: 8080
+    hostname: af844c11418d.ngrok-free.app
