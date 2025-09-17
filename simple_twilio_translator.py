@@ -272,7 +272,7 @@ def twilio_webhook():
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
     <Response>
         <Start>
-            <Stream url="wss://twilio-websocket.loca.lt" />
+            <Stream url="wss://2c4769e21ae0.ngrok-free.app/websocket" />
         </Start>
         <Say language="hi-IN">नमस्ते! अनुवाद सेवा तैयार है।</Say>
         <Say language="en-US">Hello! Translation service is ready.</Say>

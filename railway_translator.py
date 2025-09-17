@@ -13,8 +13,8 @@ from google.cloud import speech
 from google.cloud import texttospeech
 from google.cloud import translate_v2 as translate
 
-# Set Google Cloud credentials
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/Users/apple/text_to_voice_translator/google-credentials.json"
+# Set Google Cloud credentials - Railway will provide this via environment variable
+# os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/Users/apple/text_to_voice_translator/google-credentials.json"
 
 # Global variables for managing call state
 active_calls = {}
@@ -270,6 +270,9 @@ def twilio_webhook():
     
     # Get the Railway domain from environment variable
     railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN', 'your-railway-app.railway.app')
+    if railway_domain == 'your-railway-app.railway.app':
+        # Fallback to Railway's default domain format
+        railway_domain = os.environ.get('RAILWAY_STATIC_URL', 'your-railway-app.railway.app')
     
     # TwiML response to start media stream
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
