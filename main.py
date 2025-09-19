@@ -50,23 +50,23 @@ def health_check():
         "status": "healthy",
         "google_cloud_available": GOOGLE_CLOUD_AVAILABLE,
         "credentials_setup": credentials_setup,
-        "version": "30.0-main-py"
+        "version": "31.0-force-restart"
     }, 200
 
 @app.route('/')
 def home():
     return {
-        "message": "MAIN.PY Twilio Voice Translator",
+        "message": "FORCE RESTART Twilio Voice Translator",
         "webhook": "/twilio-webhook",
-        "version": "30.0-main-py",
+        "version": "31.0-force-restart",
         "status": "WORKING - Direct translation without repetition"
     }, 200
 
 @app.route('/debug')
 def debug():
     return {
-        "message": "DEBUG: MAIN.PY - This is the NEW version",
-        "version": "30.0-main-py",
+        "message": "DEBUG: FORCE RESTART - This is the NEW version",
+        "version": "31.0-force-restart",
         "features": [
             "Direct translation without 'You said'",
             "No 'Translation:' word",
