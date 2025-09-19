@@ -10,7 +10,7 @@ import time
 import warnings
 import requests
 from flask import Flask, request, Response
-import gunicorn.app.base
+# import gunicorn.app.base
 
 # Suppress warnings
 warnings.filterwarnings("ignore")
@@ -59,7 +59,22 @@ def home():
     return {
         "message": "FINAL SIMPLE Twilio Voice Translator",
         "webhook": "/twilio-webhook",
-        "version": "27.0-final-simple"
+        "version": "27.0-final-simple",
+        "status": "WORKING - Direct translation without repetition"
+    }, 200
+
+@app.route('/debug')
+def debug():
+    return {
+        "message": "DEBUG: This is the NEW version",
+        "version": "27.0-final-simple",
+        "features": [
+            "Direct translation without 'You said'",
+            "No 'Translation:' word",
+            "Simple Flask app",
+            "Google Translate API",
+            "Twilio built-in voice"
+        ]
     }, 200
 
 @app.route('/twilio-webhook', methods=['POST'])
@@ -243,21 +258,6 @@ def translate_text(text, source_lang, target_lang):
         print(f"❌ Translation error: {e}")
         return text
 
-class StandaloneApplication(gunicorn.app.base.BaseApplication):
-    def __init__(self, app, options=None):
-        self.options = options or {}
-        self.application = app
-        super().__init__()
-    
-    def load_config(self):
-        config = {key: value for key, value in self.options.items()
-                 if key in self.cfg.settings and value is not None}
-        for key, value in config.items():
-            self.cfg.set(key.lower(), value)
-    
-    def load(self):
-        return self.application
-
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 3000))
     print(f"🚀 FINAL SIMPLE TRANSLATOR on port {port}")
@@ -273,12 +273,5 @@ if __name__ == "__main__":
     print(f"   ✓ Credentials: {credentials_setup}")
     print("="*50)
     
-    options = {
-        'bind': f'0.0.0.0:{port}',
-        'workers': 1,
-        'worker_class': 'sync',
-        'timeout': 60,
-        'keepalive': 5,
-    }
-    
-    StandaloneApplication(app, options).run()
+    # Simple Flask run for Railway
+    app.run(host='0.0.0.0', port=port, debug=False)
