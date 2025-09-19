@@ -1,1 +1,1 @@
-web: python3 railway_google_speech_fix.py
+web: python3 railway_bilingual_fix.py
