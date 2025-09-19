@@ -7,3 +7,6 @@ requests==2.31.0
 gunicorn==21.2.0
 setuptools>=65.0.0,<81.0.0
 wheel>=0.38.0
+# Additional packages to prevent warnings
+packaging>=21.0
+importlib-metadata>=4.0.0
