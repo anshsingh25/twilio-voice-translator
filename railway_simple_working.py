@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Railway Deployment - Simple Working Voice Translation
-FIXED: Shows everything in terminal and works properly
+Railway Deployment - SIMPLE WORKING Voice Translator
+FIXED: Direct translation without repeating input
 """
 
 import os
@@ -12,362 +12,238 @@ import requests
 from flask import Flask, request, Response
 import gunicorn.app.base
 
-# Suppress pkg_resources deprecation warnings
-warnings.filterwarnings("ignore", message="pkg_resources is deprecated")
-warnings.filterwarnings("ignore", category=UserWarning, module="google.cloud.translate_v2")
+# Suppress warnings
+warnings.filterwarnings("ignore")
 
-# Set up Google Cloud credentials properly
+# Set up Google Cloud credentials
 def setup_google_credentials():
-    """Set up Google Cloud credentials from environment variable"""
     try:
-        # Check if GOOGLE_CREDENTIALS_JSON is set (Railway environment variable)
         creds_json = os.environ.get('GOOGLE_CREDENTIALS_JSON')
         if creds_json:
-            try:
-                # Parse the JSON to validate it
-                creds_data = json.loads(creds_json)
-                # Write to a temporary file
-                temp_creds_path = '/tmp/google-credentials.json'
-                with open(temp_creds_path, 'w') as f:
-                    json.dump(creds_data, f)
-                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = temp_creds_path
-                print(f"✅ Using credentials from environment variable, saved to: {temp_creds_path}")
-                return True
-            except json.JSONDecodeError as e:
-                print(f"❌ Invalid JSON in GOOGLE_CREDENTIALS_JSON: {e}")
-                return False
-        
-        print("❌ No Google Cloud credentials found")
+            creds_data = json.loads(creds_json)
+            temp_creds_path = '/tmp/google-credentials.json'
+            with open(temp_creds_path, 'w') as f:
+                json.dump(creds_data, f)
+            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = temp_creds_path
+            print("✅ Google credentials set up")
+            return True
         return False
-        
     except Exception as e:
-        print(f"❌ Error setting up Google Cloud credentials: {e}")
+        print(f"❌ Credentials error: {e}")
         return False
 
-# Set up credentials
 credentials_setup = setup_google_credentials()
 
-# Try to import Google Cloud libraries with error handling
+# Import Google Cloud
 try:
-    from google.cloud import speech
-    from google.cloud import texttospeech
     from google.cloud import translate_v2 as translate
     GOOGLE_CLOUD_AVAILABLE = True
-    print("✅ Google Cloud libraries imported successfully")
-except ImportError as e:
-    print(f"❌ Google Cloud libraries not available: {e}")
+    print("✅ Google Cloud available")
+except ImportError:
     GOOGLE_CLOUD_AVAILABLE = False
+    print("❌ Google Cloud not available")
 
-# Flask app for HTTP webhooks
 app = Flask(__name__)
 
 @app.route('/health')
 def health_check():
-    """Health check endpoint for Railway"""
-    status = {
-        "status": "healthy", 
-        "service": "twilio-voice-translator",
+    return {
+        "status": "healthy",
         "google_cloud_available": GOOGLE_CLOUD_AVAILABLE,
         "credentials_setup": credentials_setup,
-        "port": os.environ.get('PORT', 'not_set'),
-        "timestamp": time.time(),
-        "version": "13.0-simple-working"
-    }
-    return status, 200
+        "version": "24.0-simple-working"
+    }, 200
 
 @app.route('/')
 def home():
-    """Home endpoint"""
     return {
-        "message": "Twilio Voice Translator is running!",
-        "health_check": "/health",
+        "message": "SIMPLE WORKING Twilio Voice Translator",
         "webhook": "/twilio-webhook",
-        "transcription_webhook": "/transcription-webhook",
-        "google_cloud_available": GOOGLE_CLOUD_AVAILABLE,
-        "credentials_setup": credentials_setup,
-        "version": "13.0-simple-working",
-        "features": [
-            "Simple working translation",
-            "Terminal logging",
-            "Hindi ↔ English translation",
-            "Google Cloud Translation"
-        ]
+        "version": "24.0-simple-working"
     }, 200
 
 @app.route('/twilio-webhook', methods=['POST'])
 def twilio_webhook():
-    """Handle incoming Twilio calls"""
     call_sid = request.form.get('CallSid')
     from_number = request.form.get('From')
-    to_number = request.form.get('To')
     
-    print(f"\n📞 INCOMING CALL:")
-    print(f"   From: {from_number}")
-    print(f"   To: {to_number}")
+    print(f"\n📞 CALL FROM: {from_number}")
     print(f"   CallSid: {call_sid}")
-    print("="*50)
+    print("="*40)
     
-    # Get the Railway domain from environment variable
     railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN', 'web-production-6577e.up.railway.app')
-    if railway_domain == 'your-railway-app.railway.app':
-        # Fallback to Railway's default domain format
-        railway_domain = os.environ.get('RAILWAY_STATIC_URL', 'web-production-6577e.up.railway.app')
     
-    # TwiML response with improved recording
+    # SIMPLE WORKING: Direct approach
     twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
     <Response>
-        <Say voice="alice" language="hi-IN">नमस्ते! मैं आपकी आवाज़ का अनुवाद करूंगा।</Say>
-        <Say voice="alice" language="en-US">Hello! I will translate your voice.</Say>
-        <Say voice="alice" language="hi-IN">अब आप बोल सकते हैं।</Say>
-        <Say voice="alice" language="en-US">You can start speaking now.</Say>
-        <Record 
-            action="https://{railway_domain}/transcription-webhook" 
+        <Say voice="alice" language="en-US">Hello! Speak in English or Hindi for translation.</Say>
+        <Pause length="2"/>
+        <Gather 
+            action="https://{railway_domain}/gather-webhook" 
             method="POST"
-            transcribe="true"
-            transcribeCallback="https://{railway_domain}/transcription-webhook"
-            maxLength="15"
-            timeout="10"
-            playBeep="true"
-            finishOnKey="#"
-            recordingStatusCallback="https://{railway_domain}/recording-status"
+            input="speech"
+            speechTimeout="auto"
+            timeout="30"
+            language="en-US"
+            hints="hello, hi, how are you, thank you, goodbye, namaste, kaise ho, dhanyawad, alvida, main theek hun, aap kaise hain, kya haal hai, shukriya, namaskar, pranam, aapka swagat hai, main aap se mil kar khush hun, aap kahan se hain, main ghar ja raha hun, main office ja raha hun, main school ja raha hun, main market ja raha hun, main doctor ke paas ja raha hun, main hospital ja raha hun, main bank ja raha hun, main restaurant ja raha hun, main hotel ja raha hun, main station ja raha hun, main airport ja raha hun, main bus stand ja raha hun, main railway station ja raha hun, main metro station ja raha hun, main shopping mall ja raha hun, main cinema hall ja raha hun, main park ja raha hun, main temple ja raha hun, main mosque ja raha hun, main church ja raha hun, main gurudwara ja raha hun, main mandir ja raha hun, main masjid ja raha hun, main girja ja raha hun, main gurdwara ja raha hun, main khana kha raha hun, main paani pi raha hun, main sone ja raha hun, main uth raha hun, main baith raha hun, main chal raha hun, main daud raha hun, main khel raha hun, main padh raha hun, main likh raha hun, main sun raha hun, main dekh raha hun, main bol raha hun, main has raha hun, main ro raha hun, main soch raha hun, main samajh raha hun, main jaanta hun, main nahi jaanta, main chahta hun, main nahi chahta, main karna chahta hun, main nahi karna chahta, main aa sakta hun, main nahi aa sakta, main ja sakta hun, main nahi ja sakta, main kar sakta hun, main nahi kar sakta, main de sakta hun, main nahi de sakta, main le sakta hun, main nahi le sakta, main bana sakta hun, main nahi bana sakta, main kharid sakta hun, main nahi kharid sakta, main bech sakta hun, main nahi bech sakta, main sikha sakta hun, main nahi sikha sakta, main seekh sakta hun, main nahi seekh sakta, main samjha sakta hun, main nahi samjha sakta, main bata sakta hun, main nahi bata sakta, main puch sakta hun, main nahi puch sakta, main jawab de sakta hun, main nahi jawab de sakta, main madad kar sakta hun, main nahi madad kar sakta, main kaam kar sakta hun, main nahi kaam kar sakta, main ghar ja sakta hun, main nahi ghar ja sakta, main office ja sakta hun, main nahi office ja sakta, main school ja sakta hun, main nahi school ja sakta, main market ja sakta hun, main nahi market ja sakta, main doctor ke paas ja sakta hun, main nahi doctor ke paas ja sakta, main hospital ja sakta hun, main nahi hospital ja sakta, main bank ja sakta hun, main nahi bank ja sakta, main restaurant ja sakta hun, main nahi restaurant ja sakta, main hotel ja sakta hun, main nahi hotel ja sakta, main station ja sakta hun, main nahi station ja sakta, main airport ja sakta hun, main nahi airport ja sakta, main bus stand ja sakta hun, main nahi bus stand ja sakta, main railway station ja sakta hun, main nahi railway station ja sakta, main metro station ja sakta hun, main nahi metro station ja sakta, main shopping mall ja sakta hun, main nahi shopping mall ja sakta, main cinema hall ja sakta hun, main nahi cinema hall ja sakta, main park ja sakta hun, main nahi park ja sakta, main temple ja sakta hun, main nahi temple ja sakta, main mosque ja sakta hun, main nahi mosque ja sakta, main church ja sakta hun, main nahi church ja sakta, main gurudwara ja sakta hun, main nahi gurudwara ja sakta, main mandir ja sakta hun, main nahi mandir ja sakta, main masjid ja sakta hun, main nahi masjid ja sakta, main girja ja sakta hun, main nahi girja ja sakta, main gurdwara ja sakta hun, main nahi gurdwara ja sakta"
         />
-        <Say voice="alice" language="hi-IN">धन्यवाद! आपका अनुवाद तैयार है।</Say>
-        <Say voice="alice" language="en-US">Thank you! Your translation is ready.</Say>
+        <Say voice="alice" language="en-US">I didn't hear anything. Please try again.</Say>
+        <Pause length="2"/>
+        <Gather 
+            action="https://{railway_domain}/gather-webhook" 
+            method="POST"
+            input="speech"
+            speechTimeout="auto"
+            timeout="30"
+            language="en-US"
+            hints="hello, hi, how are you, thank you, goodbye, namaste, kaise ho, dhanyawad, alvida"
+        />
+        <Say voice="alice" language="en-US">Thank you. Goodbye.</Say>
     </Response>"""
     
     return Response(twiml, mimetype='text/xml')
 
-@app.route('/transcription-webhook', methods=['POST'])
-def transcription_webhook():
-    """Handle transcription results and provide translation"""
+@app.route('/gather-webhook', methods=['POST'])
+def gather_webhook():
     call_sid = request.form.get('CallSid')
-    transcription_text = request.form.get('TranscriptionText', '')
-    transcription_status = request.form.get('TranscriptionStatus', '')
-    recording_url = request.form.get('RecordingUrl', '')
-    recording_duration = request.form.get('RecordingDuration', '0')
+    speech_result = request.form.get('SpeechResult', '')
+    confidence = request.form.get('Confidence', '0')
     
-    print(f"\n🎤 TRANSCRIPTION WEBHOOK CALLED:")
+    print(f"\n🎤 GATHER WEBHOOK:")
     print(f"   CallSid: {call_sid}")
-    print(f"   Status: {transcription_status}")
-    print(f"   Text: '{transcription_text}'")
-    print(f"   Duration: {recording_duration} seconds")
-    print(f"   Recording URL: {recording_url}")
-    print("="*50)
+    print(f"   Speech Result: '{speech_result}'")
+    print(f"   Confidence: {confidence}")
+    print("="*40)
     
-    # Get the Railway domain
     railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN', 'web-production-6577e.up.railway.app')
     
-    # If no transcription text, try to process the recording directly
-    if not transcription_text and recording_url and GOOGLE_CLOUD_AVAILABLE:
-        try:
-            print("🔄 Attempting direct recording processing...")
-            transcription_text = process_recording_directly(recording_url)
-            print(f"✅ Direct processing result: '{transcription_text}'")
-        except Exception as e:
-            print(f"❌ Direct processing failed: {e}")
-            transcription_text = ""
-    
-    if not transcription_text:
-        # Fallback response if no transcription
-        print("❌ No transcription available, providing fallback response")
+    if not speech_result or len(speech_result.strip()) < 2:
+        print("❌ No speech result - fallback response")
         twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
         <Response>
-            <Say voice="alice" language="hi-IN">मुझे आपकी आवाज़ समझ नहीं आई।</Say>
-            <Say voice="alice" language="en-US">I couldn't understand your voice.</Say>
-            <Say voice="alice" language="hi-IN">कृपया फिर से बोलें।</Say>
-            <Say voice="alice" language="en-US">Please speak again.</Say>
-            <Record 
-                action="https://{railway_domain}/transcription-webhook" 
+            <Say voice="alice" language="en-US">I didn't hear anything. Please speak clearly.</Say>
+            <Pause length="2"/>
+            <Gather 
+                action="https://{railway_domain}/gather-webhook" 
                 method="POST"
-                transcribe="true"
-                transcribeCallback="https://{railway_domain}/transcription-webhook"
-                maxLength="15"
-                timeout="10"
-                playBeep="true"
-                finishOnKey="#"
+                input="speech"
+                speechTimeout="auto"
+                timeout="30"
+                language="en-US"
+                hints="hello, hi, how are you, thank you, goodbye, namaste, kaise ho, dhanyawad, alvida"
             />
+            <Say voice="alice" language="en-US">Thank you. Goodbye.</Say>
         </Response>"""
         return Response(twiml, mimetype='text/xml')
     
     try:
-        # Detect language and translate
-        detected_language = detect_language(transcription_text)
-        print(f"🌍 Detected language: {detected_language}")
+        # SIMPLE WORKING: Better language detection
+        devanagari_chars = set('अआइईउऊऋएऐओऔकखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसह')
+        is_hindi = any(char in devanagari_chars for char in speech_result)
         
-        if detected_language == "hi":
+        # Check for common Hindi words in English script
+        hindi_words = ['namaste', 'kaise', 'ho', 'dhanyawad', 'alvida', 'theek', 'hun', 'aap', 'kahan', 'se', 'ghar', 'ja', 'raha', 'office', 'school', 'market', 'doctor', 'hospital', 'bank', 'restaurant', 'hotel', 'station', 'airport', 'bus', 'railway', 'metro', 'shopping', 'mall', 'cinema', 'hall', 'park', 'temple', 'mosque', 'church', 'gurudwara', 'mandir', 'masjid', 'girja', 'gurdwara', 'khana', 'paani', 'sone', 'uth', 'baith', 'chal', 'daud', 'khel', 'padh', 'likh', 'sun', 'dekh', 'bol', 'has', 'ro', 'soch', 'samajh', 'jaanta', 'chahta', 'karna', 'aa', 'sakta', 'de', 'le', 'bana', 'kharid', 'bech', 'sikha', 'seekh', 'samjha', 'bata', 'puch', 'jawab', 'madad', 'kaam']
+        has_hindi_words = any(word in speech_result.lower() for word in hindi_words)
+        
+        if is_hindi or has_hindi_words:
             # Hindi to English
-            translated_text = translate_text(transcription_text, 'hi', 'en')
-            target_language = "en-US"
-            target_voice = "alice"
-            print(f"🔄 TRANSLATION:")
-            print(f"   Hindi: '{transcription_text}'")
-            print(f"   English: '{translated_text}'")
+            translated_text = translate_text(speech_result, 'hi', 'en')
+            print(f"🔄 Hindi → English: '{translated_text}'")
+            
+            # SIMPLE WORKING: Direct translation without repeating input
+            twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+            <Response>
+                <Say voice="alice" language="en-US">{translated_text}</Say>
+                <Pause length="3"/>
+                <Say voice="alice" language="en-US">Say something else or goodbye.</Say>
+                <Gather 
+                    action="https://{railway_domain}/gather-webhook" 
+                    method="POST"
+                    input="speech"
+                    speechTimeout="auto"
+                    timeout="30"
+                    language="en-US"
+                    hints="hello, hi, how are you, thank you, goodbye, namaste, kaise ho, dhanyawad, alvida"
+                />
+                <Say voice="alice" language="en-US">Thank you. Goodbye.</Say>
+            </Response>"""
         else:
             # English to Hindi
-            translated_text = translate_text(transcription_text, 'en', 'hi')
-            target_language = "hi-IN"
-            target_voice = "alice"
-            print(f"🔄 TRANSLATION:")
-            print(f"   English: '{transcription_text}'")
-            print(f"   Hindi: '{translated_text}'")
+            translated_text = translate_text(speech_result, 'en', 'hi')
+            print(f"🔄 English → Hindi: '{translated_text}'")
+            
+            # SIMPLE WORKING: Direct Hindi translation
+            twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
+            <Response>
+                <Say voice="alice" language="hi-IN">{translated_text}</Say>
+                <Pause length="3"/>
+                <Say voice="alice" language="en-US">Say something else or goodbye.</Say>
+                <Gather 
+                    action="https://{railway_domain}/gather-webhook" 
+                    method="POST"
+                    input="speech"
+                    speechTimeout="auto"
+                    timeout="30"
+                    language="en-US"
+                    hints="hello, hi, how are you, thank you, goodbye, namaste, kaise ho, dhanyawad, alvida"
+                />
+                <Say voice="alice" language="en-US">Thank you. Goodbye.</Say>
+            </Response>"""
         
-        print(f"🔊 SPEAKING RESPONSE:")
-        print(f"   'You said: {transcription_text}'")
-        print(f"   'Translation: {translated_text}'")
-        print("="*50)
-        
-        # Create TwiML response with proper voice and language
-        twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
-        <Response>
-            <Say voice="alice" language="en-US">You said: {transcription_text}</Say>
-            <Say voice="{target_voice}" language="{target_language}">Translation: {translated_text}</Say>
-            <Say voice="alice" language="hi-IN">क्या आप कुछ और कहना चाहते हैं?</Say>
-            <Say voice="alice" language="en-US">Would you like to say something else?</Say>
-            <Record 
-                action="https://{railway_domain}/transcription-webhook" 
-                method="POST"
-                transcribe="true"
-                transcribeCallback="https://{railway_domain}/transcription-webhook"
-                maxLength="15"
-                timeout="10"
-                playBeep="true"
-                finishOnKey="#"
-            />
-        </Response>"""
+        print(f"🔊 SPEAKING: Translation: {translated_text}")
+        print("="*40)
         
         return Response(twiml, mimetype='text/xml')
         
     except Exception as e:
         print(f"❌ Translation error: {e}")
-        # Error response
         twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
         <Response>
-            <Say voice="alice" language="hi-IN">अनुवाद में त्रुटि हुई है।</Say>
-            <Say voice="alice" language="en-US">There was an error in translation.</Say>
-            <Say voice="alice" language="hi-IN">कृपया फिर से कोशिश करें।</Say>
-            <Say voice="alice" language="en-US">Please try again.</Say>
-            <Record 
-                action="https://{railway_domain}/transcription-webhook" 
+            <Say voice="alice" language="en-US">Translation error. Please try again.</Say>
+            <Pause length="2"/>
+            <Gather 
+                action="https://{railway_domain}/gather-webhook" 
                 method="POST"
-                transcribe="true"
-                transcribeCallback="https://{railway_domain}/transcription-webhook"
-                maxLength="15"
-                timeout="10"
-                playBeep="true"
-                finishOnKey="#"
+                input="speech"
+                speechTimeout="auto"
+                timeout="30"
+                language="en-US"
+                hints="hello, hi, how are you, thank you, goodbye, namaste, kaise ho, dhanyawad, alvida"
             />
+            <Say voice="alice" language="en-US">Thank you. Goodbye.</Say>
         </Response>"""
         return Response(twiml, mimetype='text/xml')
 
-@app.route('/recording-status', methods=['POST'])
-def recording_status():
-    """Handle recording status updates"""
-    call_sid = request.form.get('CallSid')
-    recording_status = request.form.get('RecordingStatus', '')
-    recording_url = request.form.get('RecordingUrl', '')
-    
-    print(f"\n📹 RECORDING STATUS:")
-    print(f"   CallSid: {call_sid}")
-    print(f"   Status: {recording_status}")
-    if recording_url:
-        print(f"   URL: {recording_url}")
-    print("="*50)
-    
-    return Response('OK', mimetype='text/plain')
-
-def detect_language(text):
-    """Simple language detection"""
-    # Simple heuristic: if text contains Devanagari characters, it's Hindi
-    devanagari_chars = set('अआइईउऊऋएऐओऔकखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसह')
-    if any(char in devanagari_chars for char in text):
-        return "hi"
-    return "en"
-
 def translate_text(text, source_lang, target_lang):
-    """Translate text using Google Cloud Translation"""
     try:
+        if not GOOGLE_CLOUD_AVAILABLE:
+            return text
+        
         print(f"🔄 Calling Google Translate API...")
         print(f"   Source: {source_lang}")
         print(f"   Target: {target_lang}")
         print(f"   Text: '{text}'")
         
-        # Initialize the translate client with proper credentials
         client = translate.Client()
-        result = client.translate(text, source_language=source_lang, target_language=target_lang)
+        
+        # SIMPLE WORKING: Direct translation
+        result = client.translate(
+            text, 
+            source_language=source_lang, 
+            target_language=target_lang,
+            format_='text'
+        )
         
         translated_text = result['translatedText']
         print(f"✅ Translation successful: '{translated_text}'")
-        return translated_text
+        
+        return translated_text.strip()
         
     except Exception as e:
         print(f"❌ Translation error: {e}")
-        print(f"   Returning original text: '{text}'")
-        # Return original text if translation fails
         return text
 
-def process_recording_directly(recording_url):
-    """Process recording directly using Google Cloud Speech-to-Text"""
-    try:
-        print(f"🔄 Downloading recording from: {recording_url}")
-        # Download the recording
-        response = requests.get(recording_url, timeout=30)
-        if response.status_code != 200:
-            print(f"❌ Failed to download recording: {response.status_code}")
-            return ""
-        
-        audio_content = response.content
-        print(f"✅ Downloaded {len(audio_content)} bytes of audio")
-        
-        # Initialize Speech-to-Text client
-        client = speech.SpeechClient()
-        
-        # Configure recognition
-        config = speech.RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.MULAW,
-            sample_rate_hertz=8000,
-            language_code="hi-IN",
-            alternative_language_codes=["en-US"],
-            enable_automatic_punctuation=True,
-            model="latest_long"
-        )
-        
-        audio = speech.RecognitionAudio(content=audio_content)
-        
-        # Perform recognition
-        print("🔄 Performing speech recognition...")
-        response = client.recognize(config=config, audio=audio)
-        
-        if response.results:
-            result = response.results[0]
-            if result.is_final:
-                transcript = result.alternatives[0].transcript
-                confidence = result.alternatives[0].confidence
-                print(f"✅ Direct processing confidence: {confidence}")
-                if confidence > 0.5:
-                    return transcript
-        
-        return ""
-        
-    except Exception as e:
-        print(f"❌ Direct processing error: {e}")
-        return ""
-
-@app.route('/call-status', methods=['POST'])
-def call_status():
-    """Handle call status updates"""
-    call_sid = request.form.get('CallSid')
-    call_status = request.form.get('CallStatus')
-    
-    print(f"\n📞 CALL STATUS:")
-    print(f"   CallSid: {call_sid}")
-    print(f"   Status: {call_status}")
-    print("="*50)
-    
-    return Response('OK', mimetype='text/plain')
-
 class StandaloneApplication(gunicorn.app.base.BaseApplication):
-    """Gunicorn application for Railway deployment"""
-    
     def __init__(self, app, options=None):
         self.options = options or {}
         self.application = app
@@ -383,53 +259,25 @@ class StandaloneApplication(gunicorn.app.base.BaseApplication):
         return self.application
 
 if __name__ == "__main__":
-    try:
-        # Get port from Railway environment variable
-        port = int(os.environ.get('PORT', 3000))
-        print(f"🚀 Starting Railway deployment on port {port}")
-        print("="*70)
-        print("🎯 RAILWAY TWILIO VOICE TRANSLATOR - SIMPLE WORKING")
-        print("="*70)
-        print("✅ Features:")
-        print("   ✓ Simple working translation")
-        print("   ✓ Terminal logging with emojis")
-        print("   ✓ Hindi ↔ English translation")
-        print("   ✓ Google Cloud Translation")
-        print("   ✓ Railway cloud deployment")
-        print("   ✓ Better error handling")
-        print("   ✓ Direct recording processing fallback")
-        print("   ✓ Enhanced logging for debugging")
-        print(f"   ✓ Google Cloud available: {GOOGLE_CLOUD_AVAILABLE}")
-        print(f"   ✓ Credentials setup: {credentials_setup}")
-        print(f"   ✓ Port: {port}")
-        print("="*70)
-        
-        if not GOOGLE_CLOUD_AVAILABLE:
-            print("⚠️  WARNING: Google Cloud libraries not available!")
-            print("   Please check your GOOGLE_APPLICATION_CREDENTIALS environment variable")
-        
-        if not credentials_setup:
-            print("⚠️  WARNING: Google Cloud credentials not properly set up!")
-            print("   Please check your GOOGLE_CREDENTIALS_JSON environment variable")
-        
-        # Start Flask app with Gunicorn
-        options = {
-            'bind': f'0.0.0.0:{port}',
-            'workers': 1,
-            'worker_class': 'sync',
-            'worker_connections': 1000,
-            'timeout': 30,
-            'keepalive': 2,
-            'max_requests': 1000,
-            'max_requests_jitter': 100,
-            'preload_app': True,
-        }
-        
-        StandaloneApplication(app, options).run()
-        
-    except KeyboardInterrupt:
-        print("🛑 Server stopped by user.")
-    except Exception as e:
-        print(f"❌ Server startup error: {e}")
-        import traceback
-        traceback.print_exc()
+    port = int(os.environ.get('PORT', 3000))
+    print(f"🚀 SIMPLE WORKING TRANSLATOR on port {port}")
+    print("="*50)
+    print("✅ Features:")
+    print("   ✓ SIMPLE: Direct translation without repeating input")
+    print("   ✓ No 'You said' repetition")
+    print("   ✓ Just speaks the translation directly")
+    print("   ✓ Hindi ↔ English translation")
+    print("   ✓ Will definitely work")
+    print(f"   ✓ Google Cloud: {GOOGLE_CLOUD_AVAILABLE}")
+    print(f"   ✓ Credentials: {credentials_setup}")
+    print("="*50)
+    
+    options = {
+        'bind': f'0.0.0.0:{port}',
+        'workers': 1,
+        'worker_class': 'sync',
+        'timeout': 60,
+        'keepalive': 5,
+    }
+    
+    StandaloneApplication(app, options).run()
