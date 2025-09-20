@@ -1,1 +1,1 @@
-web: python3 simple_conference.py
+web: python3 improved_hindi_translator.py

@@ -232,41 +232,15 @@ def twilio_webhook():
         # Make actual call to your number using Twilio REST API
         welcome_text = "नमस्ते! आपका call forward हो रहा है। Please wait while I connect you."
         
-        # First, play welcome message
+        # Simple call forwarding - no conference
         twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="alice" language="en-US">{welcome_text}</Say>
-    <Pause length="3"/>
-    <Say voice="alice" language="en-US">Calling your number now.</Say>
-    <Hangup/>
+    <Say voice="alice" language="en-US">Connecting you now.</Say>
+    <Dial>
+        <Number>{your_number}</Number>
+    </Dial>
+    <Say voice="alice" language="en-US">Call ended.</Say>
 </Response>"""
-        
-        # Make the actual call to your number using Twilio REST API
-        if twilio_client:
-            try:
-                print(f"📞 Making REST API call to {your_number}")
-                # Get your Twilio number from environment or use a default
-                twilio_number = os.environ.get('TWILIO_PHONE_NUMBER', '+1234567890')
-                
-                call = twilio_client.calls.create(
-                    to=your_number,
-                    from_=twilio_number,  # Use your verified Twilio number
-                    url=f"https://{current_domain}/call-your-number",
-                    method='POST',
-                    status_callback=f"https://{current_domain}/call-ended",
-                    status_callback_method='POST',
-                    record=True,
-                    recording_status_callback=f"https://{current_domain}/recording-callback"
-                )
-                print(f"✅ Call initiated: {call.sid}")
-            except Exception as e:
-                print(f"❌ Error making call: {e}")
-        else:
-            print("❌ Twilio client not available - need TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN")
-            print("📝 To enable call forwarding, set these environment variables:")
-            print("   export TWILIO_ACCOUNT_SID='your_account_sid_here'")
-            print("   export TWILIO_AUTH_TOKEN='your_auth_token_here'")
-            print("   export TWILIO_PHONE_NUMBER='your_twilio_phone_number'")
         
         return Response(twiml, mimetype='text/xml')
         
