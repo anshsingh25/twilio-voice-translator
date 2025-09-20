@@ -1,1 +1,1 @@
-web: python3 conference_call_forwarder.py
+web: python3 simple_conference.py
