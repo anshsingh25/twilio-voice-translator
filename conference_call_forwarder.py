@@ -40,8 +40,8 @@ def twilio_webhook():
         from twilio.rest import Client
         
         client = Client(
-            os.environ.get('TWILIO_ACCOUNT_SID', 'AC9d0df83b641a03dc0dd1861f3663bf5b'),
-            os.environ.get('TWILIO_AUTH_TOKEN', '2df00ce08d7c944719281aa84a4b070f')
+            os.environ.get('TWILIO_ACCOUNT_SID'),
+            os.environ.get('TWILIO_AUTH_TOKEN')
         )
         
         # Call your number to join same conference
