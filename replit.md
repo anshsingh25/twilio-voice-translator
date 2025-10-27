@@ -78,10 +78,18 @@ Set the following secrets in Replit:
   - ✅ Installed all Python dependencies (including flask-sock for WebSocket support)
   - ✅ Configured workflow for automatic server start
 
+## Deployment Options
+This project works on both:
+- ✅ **Replit** - Development and testing (current environment)
+- ✅ **Railway** - Production deployment (see RAILWAY_SETUP.md)
+
+The code automatically detects the platform and uses the appropriate domain.
+
 ## Current Implementation Status
 **Active Mode**: Conference Bridge (connects both parties on same call)
 - ✅ Incoming call forwarding working
 - ✅ Both parties connected via conference
+- ✅ Works on both Replit and Railway
 - ⚠️ **Translation in development**: True real-time translation requires Twilio Media Streams implementation
 
 **What's Working Now**:

@@ -21,7 +21,10 @@ app = Flask(__name__)
 sock = Sock(app)
 
 FORWARD_TO_NUMBER = os.environ.get('FORWARD_TO_NUMBER', '')
-replit_domain = os.environ.get('REPLIT_DEV_DOMAIN', 'localhost:5000')
+# Support both Railway and Replit domains
+railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN')
+replit_domain = os.environ.get('REPLIT_DEV_DOMAIN')
+app_domain = railway_domain or replit_domain or 'localhost:5000'
 
 speech_client = speech.SpeechClient()
 translate_client = translate.Client()
@@ -78,7 +81,7 @@ def twilio_webhook():
             beep="false"
             startConferenceOnEnter="true"
             endConferenceOnExit="true"
-            statusCallback="https://{replit_domain}/conference-status"
+            statusCallback="https://{app_domain}/conference-status"
             statusCallbackMethod="POST"
             statusCallbackEvent="start end join leave">
             translator-{call_sid}
@@ -95,7 +98,7 @@ def twilio_webhook():
     # Call your number and add to same conference
     try:
         outbound_call = client.calls.create(
-            url=f"https://{replit_domain}/connect-to-conference?conference=translator-{call_sid}",
+            url=f"https://{app_domain}/connect-to-conference?conference=translator-{call_sid}",
             to=FORWARD_TO_NUMBER,
             from_=request.form.get('To')
         )
@@ -214,7 +217,8 @@ if __name__ == "__main__":
     print(f"🚀 REAL-TIME TRANSLATOR on port {port}")
     print("="*60)
     print(f"✅ Forward to: {FORWARD_TO_NUMBER}")
-    print(f"✅ Webhook URL: https://{replit_domain}/twilio-webhook")
+    print(f"✅ Domain: {app_domain}")
+    print(f"✅ Webhook URL: https://{app_domain}/twilio-webhook")
     print("="*60)
     print("📞 How it works:")
     print("   1. Someone calls your Twilio number")
