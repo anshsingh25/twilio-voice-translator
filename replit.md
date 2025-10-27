@@ -86,27 +86,37 @@ This project works on both:
 The code automatically detects the platform and uses the appropriate domain.
 
 ## Current Implementation Status
-**Active Mode**: Conference Bridge (connects both parties on same call)
-- ✅ Incoming call forwarding working
-- ✅ Both parties connected via conference
+**Active Mode**: ✅ **REAL-TIME BIDIRECTIONAL TRANSLATION WITH MEDIA STREAMS**
+- ✅ Twilio Media Streams implementation complete
+- ✅ Real-time English → Hindi translation
+- ✅ Real-time Hindi → English translation
+- ✅ WebSocket audio streaming for both participants
+- ✅ Google Cloud AI integration (Speech-to-Text, Translate, Text-to-Speech)
 - ✅ Works on both Replit and Railway
-- ⚠️ **Translation in development**: True real-time translation requires Twilio Media Streams implementation
 
-**What's Working Now**:
-1. Someone calls your Twilio number
+**How It Works Now**:
+1. Someone calls your Twilio number (speaks English)
 2. System automatically calls you (6358762776)
-3. Both parties are connected in a conference call
-4. You can have a normal conversation
+3. **Media Streams capture audio from both participants in real-time**
+4. **When caller speaks English:**
+   - Audio → Google Speech-to-Text → Transcription
+   - Translation (English → Hindi)
+   - Google Text-to-Speech → Hindi audio
+   - You hear the Hindi translation in real-time
+5. **When you speak Hindi:**
+   - Audio → Google Speech-to-Text → Transcription
+   - Translation (Hindi → English)
+   - Google Text-to-Speech → English audio
+   - Caller hears the English translation in real-time
+6. **Truly bidirectional real-time conversation with translation**
 
-**What's Next for Real-time Translation**:
-For bidirectional real-time translation to work, we need to implement Twilio Media Streams which:
-- Captures audio from both participants via WebSocket
-- Transcribes speech using Google Speech-to-Text
-- Translates using Google Translate API
-- Converts back to speech using Google Text-to-Speech
-- Streams audio back to appropriate participant
-
-This requires implementing WebSocket audio stream processing at `/media-stream` endpoint.
+**Technical Implementation**:
+- WebSocket connections for each participant (`/media-stream/<call_sid>/<participant>`)
+- Audio buffering (2-second chunks for processing)
+- mulaw audio format (Twilio standard)
+- Automatic language detection
+- Confidence-based transcription (>70% confidence)
+- Streaming audio back to appropriate participant
 
 ## File Structure
 - `improved_hindi_translator.py` - Main application (recommended)

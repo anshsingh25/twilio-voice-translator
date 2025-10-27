@@ -1,1 +1,1 @@
-web: gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 realtime_translator:app
+web: gunicorn --bind 0.0.0.0:$PORT --workers 1 --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker --timeout 120 media_stream_translator:app
