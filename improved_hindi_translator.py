@@ -54,8 +54,11 @@ except ImportError:
 
 app = Flask(__name__)
 
-# Get Railway domain
-railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN', '584167e5e8a5.ngrok-free.app')
+# Get Replit domain or fallback
+replit_domain = os.environ.get('REPLIT_DEV_DOMAIN', 'localhost:5000')
+
+# Get forwarding phone number from environment
+FORWARD_TO_NUMBER = os.environ.get('FORWARD_TO_NUMBER', '')
 
 def detect_language(text):
     """Detect if text is Hindi or English"""
@@ -165,18 +168,16 @@ def health():
 @app.route('/test-call-forwarding')
 def test_call_forwarding():
     """Test endpoint to verify call forwarding configuration"""
-    your_number = "+916358762776"
-    railway_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN', '584167e5e8a5.ngrok-free.app')
     
     return {
         "message": "Call Forwarding Test",
-        "your_number": your_number,
-        "railway_domain": railway_domain,
-        "webhook_url": f"https://{railway_domain}/twilio-webhook",
-        "call_ended_url": f"https://{railway_domain}/call-ended",
-        "recording_callback_url": f"https://{railway_domain}/recording-callback",
-        "gather_webhook_url": f"https://{railway_domain}/gather-webhook",
-        "status": "Ready for testing",
+        "your_number": FORWARD_TO_NUMBER if FORWARD_TO_NUMBER else "Not configured",
+        "replit_domain": replit_domain,
+        "webhook_url": f"https://{replit_domain}/twilio-webhook",
+        "call_ended_url": f"https://{replit_domain}/call-ended",
+        "recording_callback_url": f"https://{replit_domain}/recording-callback",
+        "gather_webhook_url": f"https://{replit_domain}/gather-webhook",
+        "status": "Ready for testing" if FORWARD_TO_NUMBER else "Configure FORWARD_TO_NUMBER environment variable",
         "features": [
             "Call forwarding to your number",
             "Fallback to translation service",
@@ -192,11 +193,19 @@ def twilio_webhook():
         call_sid = request.form.get('CallSid')
         caller_id = request.form.get('From')
         
-        # Your personal number (replace with your actual number)
-        your_number = "+916358762776"  # Change this to your personal number
+        # Get forwarding number from environment
+        if not FORWARD_TO_NUMBER:
+            twiml = """<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice" language="en-US">Sorry, forwarding number not configured.</Say>
+    <Hangup/>
+</Response>"""
+            return Response(twiml, mimetype='text/xml')
         
-        # Get current ngrok domain
-        current_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN', 'f9632316f3b9.ngrok-free.app')
+        your_number = FORWARD_TO_NUMBER
+        
+        # Get current domain
+        current_domain = replit_domain
         
         print(f"📞 CALL FROM: {caller_id}")
         print(f"   CallSid: {call_sid}")
@@ -227,7 +236,7 @@ def twilio_webhook():
         print(f"   Welcome: {welcome_text}")
         print(f"   Your number: {your_number}")
         print(f"   Caller ID: {caller_id}")
-        print(f"   Railway domain: {railway_domain}")
+        print(f"   Replit domain: {replit_domain}")
         
         # Make actual call to your number using Twilio REST API
         welcome_text = "नमस्ते! आपका call forward हो रहा है। Please wait while I connect you."
@@ -285,8 +294,8 @@ def conference_wait():
     """Handle conference waiting - Call your number to join"""
     try:
         conference_name = request.form.get('ConferenceName')
-        your_number = "+916358762776"
-        current_domain = os.environ.get('RAILWAY_PUBLIC_DOMAIN', '584167e5e8a5.ngrok-free.app')
+        your_number = FORWARD_TO_NUMBER
+        current_domain = replit_domain
         
         print(f"🎙️ CONFERENCE WAIT:")
         print(f"   Conference: {conference_name}")
@@ -419,7 +428,7 @@ def gather_webhook():
             twiml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Say voice="alice" language="en-US">Sorry, I didn't hear anything. Please try again.</Say>
-    <Gather action="https://{railway_domain}/gather-webhook" method="POST" input="speech" speechTimeout="auto" timeout="30" language="hi-IN" speechModel="phone_call"/>
+    <Gather action="https://{replit_domain}/gather-webhook" method="POST" input="speech" speechTimeout="auto" timeout="30" language="hi-IN" speechModel="phone_call"/>
 </Response>"""
             return Response(twiml, mimetype='text/xml')
         
@@ -444,7 +453,7 @@ def gather_webhook():
     <Say voice="alice" language="en-US">{translated_text}</Say>
     <Pause length="3"/>
     <Say voice="alice" language="en-US">Say something else or goodbye.</Say>
-    <Gather action="https://{railway_domain}/gather-webhook" method="POST" input="speech" speechTimeout="auto" timeout="30" language="hi-IN" speechModel="phone_call"/>
+    <Gather action="https://{replit_domain}/gather-webhook" method="POST" input="speech" speechTimeout="auto" timeout="30" language="hi-IN" speechModel="phone_call"/>
     <Say voice="alice" language="en-US">Thank you. Goodbye.</Say>
 </Response>"""
         else:
@@ -455,7 +464,7 @@ def gather_webhook():
     <Say voice="alice" language="en-US">{translated_text}</Say>
     <Pause length="3"/>
     <Say voice="alice" language="en-US">Say something else or goodbye.</Say>
-    <Gather action="https://{railway_domain}/gather-webhook" method="POST" input="speech" speechTimeout="auto" timeout="30" language="hi-IN" speechModel="phone_call"/>
+    <Gather action="https://{replit_domain}/gather-webhook" method="POST" input="speech" speechTimeout="auto" timeout="30" language="hi-IN" speechModel="phone_call"/>
     <Say voice="alice" language="en-US">Thank you. Goodbye.</Say>
 </Response>"""
         
@@ -510,11 +519,14 @@ def translate_text_endpoint():
         return {"error": str(e)}, 500
 
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 5001))
+    port = int(os.environ.get('PORT', 5000))
     print(f"🚀 CALL FORWARDING TRANSLATOR on port {port}")
     print("="*60)
     print("✅ Features:")
-    print("   ✓ Call forwarding to +916358762776")
+    if FORWARD_TO_NUMBER:
+        print(f"   ✓ Call forwarding to {FORWARD_TO_NUMBER}")
+    else:
+        print("   ⚠️  Set FORWARD_TO_NUMBER environment variable")
     print("   ✓ Call recording for translation")
     print("   ✓ Better Hindi recognition")
     print("   ✓ Google Translate integration")
@@ -525,7 +537,10 @@ if __name__ == "__main__":
     print("="*60)
     print("📞 Usage:")
     print("   Someone calls your Twilio number")
-    print("   → Call forwards to +916358762776")
+    if FORWARD_TO_NUMBER:
+        print(f"   → Call forwards to {FORWARD_TO_NUMBER}")
+    else:
+        print("   → Configure FORWARD_TO_NUMBER first")
     print("   → You can have normal conversation")
     print("   → Call is recorded for translation")
     print("   → Translation sent after call ends")
