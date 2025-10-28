@@ -9,5 +9,3 @@ gunicorn==21.2.0
 gevent==24.2.1
 gevent-websocket==0.10.1
 twilio==9.8.4
-setuptools>=65.0.0,<81.0.0
-wheel>=0.38.0
