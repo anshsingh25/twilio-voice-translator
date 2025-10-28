@@ -28,12 +28,16 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python media_stream_translator.py"
+args = "python improved_hindi_translator.py"
 waitForPort = 5000
 
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 45271
+externalPort = 3000
 
 [deployment]
 deploymentTarget = "vm"
