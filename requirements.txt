@@ -9,3 +9,7 @@ gunicorn==21.2.0
 gevent==24.2.1
 gevent-websocket==0.10.1
 twilio==9.8.4
+flask-socketio
+quart
+sift-stack-py
+socketio
