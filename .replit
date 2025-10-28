@@ -28,16 +28,12 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python realtime_translator.py"
+args = "python media_stream_translator.py"
 waitForPort = 5000
 
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 33747
-externalPort = 3000
 
 [deployment]
 deploymentTarget = "vm"
