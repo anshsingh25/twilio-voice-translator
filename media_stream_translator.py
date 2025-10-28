@@ -128,7 +128,6 @@ def receiver_connected(call_sid):
     <Start>
         <Stream url="wss://{app_domain}/media-stream/{call_sid}/receiver" />
     </Start>
-    <Pause length="3600"/>
 </Response>"""
     
     print(f"✅ TwiML sent for receiver")
