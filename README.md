@@ -1,40 +1,39 @@
-# Twilio Bidirectional Voice Translator
+# Real-Time Bidirectional Voice Translator
 
-A real-time voice translation system that enables seamless communication between Hindi and English speakers through Twilio phone calls.
+A Twilio-powered voice translation system that provides real-time translation between Hindi and English during phone calls using Google Cloud AI and Twilio Media Streams.
 
 ## Features
 
-- 🔄 **Bidirectional Translation**: Hindi ↔ English real-time translation
-- 🎤 **Voice Activity Detection**: Automatic speech detection and processing
-- 🌐 **Language Detection**: Auto-detect Hindi/English speech
-- ⚡ **Low Latency**: Optimized for real-time conversation
-- 📞 **Twilio Integration**: Works with any Twilio phone number
-- 🔊 **High Quality Audio**: Google Cloud TTS with natural voices
+- 🔄 **Bidirectional Translation**: Real-time Hindi ↔ English translation
+- 📞 **Twilio Media Streams**: Low-latency audio streaming
+- 🎤 **Google Cloud AI**: 
+  - Speech-to-Text for transcription
+  - Translation API for language conversion
+  - Text-to-Speech for natural voice output
+- 🌐 **Automatic Call Forwarding**: Forwards incoming calls to configured number
+- ⚡ **Real-Time Processing**: Instant translation during conversation
 
 ## How It Works
 
-1. **You call someone** through your Twilio number
-2. **When they pick up**, the system starts listening
-3. **You speak in English** → they hear it in Hindi
-4. **They speak in Hindi** → you hear it in English
-5. **Real-time conversation** with automatic translation
+1. Someone calls your Twilio number (speaks English)
+2. System automatically forwards call to your configured number (+441138876033)
+3. Real-time translation happens in both directions:
+   - English → Hindi (for receiver to hear)
+   - Hindi → English (for caller to hear)
+4. Both parties hear translated audio in real-time through media streams
 
 ## Prerequisites
 
-- Python 3.7+
-- Google Cloud account with Speech-to-Text, Text-to-Speech, and Translation APIs enabled
+- Python 3.11+
 - Twilio account with a phone number
-- ngrok for local development
+- Google Cloud account with the following APIs enabled:
+  - Cloud Speech-to-Text API
+  - Cloud Translation API
+  - Cloud Text-to-Speech API
 
-## Quick Setup
+## Setup Instructions
 
-### 1. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Google Cloud Setup
+### 1. Google Cloud Setup
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project or select existing one
@@ -43,161 +42,142 @@ pip install -r requirements.txt
    - Cloud Text-to-Speech API
    - Cloud Translation API
 4. Create a service account and download the JSON key
-5. Save the key as `google-credentials.json` in this directory
+5. Save the key as `google-credentials.json` in project root
 
-### 3. Run Setup Script
+### 2. Environment Variables
 
-```bash
-python setup_twilio_translator.py
-```
-
-This script will:
-- Check all dependencies
-- Verify Google Cloud credentials
-- Check ngrok status
-- Update configuration files
-- Provide setup instructions
-
-### 4. Start ngrok (if not running)
+Set the following secrets in your Replit project or create a `.env` file:
 
 ```bash
-ngrok http 3000
+FORWARD_TO_NUMBER=+441138876033
+TWILIO_ACCOUNT_SID=your_twilio_account_sid
+TWILIO_AUTH_TOKEN=your_twilio_auth_token
 ```
 
-### 5. Configure Twilio
+### 3. Installation
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the server
+python media_stream_translator.py
+```
+
+The server will start on port 5000.
+
+### 4. Twilio Configuration
 
 1. Go to your [Twilio Console](https://console.twilio.com/)
 2. Navigate to Phone Numbers → Manage → Active numbers
 3. Click on your phone number
-4. Set the webhook URL to: `https://YOUR_NGROK_URL.ngrok-free.app/twilio-webhook`
-5. Set HTTP method to POST
-6. Save the configuration
+4. Under "Voice & Fax" → "A Call Comes In"
+5. Set Webhook URL to: `https://your-domain.com/twilio-webhook`
+6. Method: POST
+7. Save configuration
 
-### 6. Run the Translator
+## API Endpoints
 
-```bash
-python advanced_twilio_translator.py
+- `GET /` - Status and features information
+- `GET /health` - Health check with active streams count
+- `POST /twilio-webhook` - Main webhook for incoming calls
+- `POST /receiver-connected/<call_sid>` - Handles receiver connection
+- `POST /call-ended` - Cleanup when call ends
+- `WebSocket /media-stream/<call_sid>/<participant>` - Audio stream handling
+
+## Project Structure
+
+```
+.
+├── media_stream_translator.py  # Main application with Media Streams
+├── improved_hindi_translator.py # Enhanced translator (alternative)
+├── requirements.txt            # Python dependencies
+├── google-credentials.json     # Google Cloud credentials (not in git)
+├── .gitignore                 # Git ignore rules
+├── replit.md                  # Project documentation
+└── README.md                  # This file
 ```
 
-### 7. Test the System
+## Technology Stack
 
-1. Call your Twilio phone number
-2. When the call connects, you'll hear welcome messages in both languages
-3. Start speaking - the system will automatically translate between Hindi and English
+- **Backend**: Python 3.11, Flask
+- **WebSockets**: flask-sock for real-time communication
+- **Speech Recognition**: Google Cloud Speech-to-Text
+- **Translation**: Google Cloud Translation API
+- **Voice Synthesis**: Google Cloud Text-to-Speech
+- **Telephony**: Twilio Media Streams API
+- **Audio Processing**: audioop (mulaw encoding at 8kHz)
 
-## Files Overview
+## Security Notes
 
-- `advanced_twilio_translator.py` - Main application with advanced features
-- `bidirectional_twilio_translator.py` - Basic bidirectional translator
-- `setup_twilio_translator.py` - Automated setup script
-- `test_translation.py` - Test script for translation functions
-- `requirements.txt` - Python dependencies
-- `google-credentials.json` - Google Cloud service account key (you need to add this)
+- ✅ `google-credentials.json` is excluded from git
+- ✅ Environment variables used for sensitive data
+- ✅ `.gitignore` configured to exclude credentials
+- ⚠️ Never commit API keys or tokens to version control
 
-## Advanced Features
+## Deployment
 
-### Voice Activity Detection
-- Automatically detects when someone is speaking
-- Prevents processing of background noise
-- Optimizes for real-time conversation
+This project runs on Replit and can be deployed to any platform supporting:
+- Python 3.11+
+- WebSocket connections
+- Public HTTPS endpoint (required for Twilio webhooks)
 
-### Language Detection
-- Automatically detects Hindi vs English speech
-- Uses character analysis and word patterns
-- Switches translation direction automatically
+### Production Considerations
 
-### Rate Limiting
-- Prevents spam translations
-- Minimum 2-second interval between translations
-- Ensures smooth conversation flow
+- Use production WSGI server (Gunicorn, uWSGI) instead of Flask dev server
+- Implement proper logging and monitoring
+- Add rate limiting for API endpoints
+- Set up error handling and retry logic
+- Configure SSL/TLS certificates
 
-## Configuration Options
+## Known Issues & Limitations
 
-You can modify these settings in the code:
+- `audioop` module is deprecated in Python 3.13 (currently using 3.11)
+- Translation accuracy depends on speech clarity and background noise
+- Network latency may affect real-time translation quality
+- Google Cloud API costs apply per usage
 
-```python
-# Voice activity detection threshold
-VAD_THRESHOLD = 0.01
+## Testing
 
-# Minimum confidence for speech recognition
-CONFIDENCE_THRESHOLD = 0.6
-
-# Minimum time between translations (seconds)
-MIN_TRANSLATION_INTERVAL = 2.0
-
-# Audio quality settings
-SAMPLE_RATE = 8000  # Twilio standard
-AUDIO_ENCODING = MULAW  # Twilio standard
-```
+1. Call your Twilio number from any phone
+2. When your configured number rings, answer it
+3. Speak clearly in English or Hindi
+4. Listen for the translated audio on the other end
 
 ## Troubleshooting
 
-### Common Issues
+**No translation happening:**
+- Check Google Cloud credentials are valid
+- Verify all APIs are enabled in Google Cloud Console
+- Speak clearly and minimize background noise
+- Check console logs for errors
 
-1. **"Google credentials not found"**
-   - Ensure `google-credentials.json` is in the project directory
-   - Check that the file contains valid JSON
+**Call not connecting:**
+- Verify Twilio webhook URL is correct
+- Check FORWARD_TO_NUMBER is set correctly
+- Ensure Twilio account has sufficient credits
 
-2. **"ngrok not running"**
-   - Start ngrok with: `ngrok http 3000`
-   - Update the webhook URL in Twilio console
-
-3. **"Translation not working"**
-   - Check Google Cloud API quotas
-   - Ensure all required APIs are enabled
-   - Run `python test_translation.py` to test functions
-
-4. **"Audio quality issues"**
-   - Check internet connection
-   - Ensure stable ngrok tunnel
-   - Verify Twilio account has sufficient credits
-
-### Testing
-
-Run the test script to verify everything is working:
-
-```bash
-python test_translation.py
-```
-
-This will test:
-- Hindi to English translation
-- English to Hindi translation
-- English text-to-speech
-- Hindi text-to-speech
+**Audio quality issues:**
+- Check internet connection stability
+- Verify network latency is reasonable
+- Test with different phone connections
 
 ## API Costs
 
 - **Google Cloud Speech-to-Text**: ~$0.006 per 15 seconds
 - **Google Cloud Translation**: ~$20 per 1M characters
 - **Google Cloud Text-to-Speech**: ~$4 per 1M characters
-- **Twilio**: ~$0.02 per minute for calls
-
-## Production Deployment
-
-For production use:
-
-1. Deploy to a cloud service (AWS, GCP, Azure)
-2. Use a proper domain instead of ngrok
-3. Set up SSL certificates
-4. Configure proper logging and monitoring
-5. Set up API rate limiting
-6. Use environment variables for sensitive data
-
-## Support
-
-If you encounter issues:
-
-1. Check the console output for error messages
-2. Verify all APIs are enabled in Google Cloud
-3. Ensure Twilio webhook is configured correctly
-4. Test individual components using the test script
+- **Twilio Voice**: ~$0.02 per minute for calls
+- **Twilio Media Streams**: Free with voice calls
 
 ## License
 
-This project is open source. Feel free to modify and distribute.
+MIT License - Feel free to use and modify for your needs.
+
+## Support
+
+For issues or questions, please open an issue in the GitHub repository.
 
 ---
 
-**Happy translating! 🎉**
-# Twilio-replit-28-oct
+**Built with ❤️ using Twilio Media Streams and Google Cloud AI**
