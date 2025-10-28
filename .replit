@@ -35,10 +35,6 @@ waitForPort = 5000
 localPort = 5000
 externalPort = 80
 
-[[ports]]
-localPort = 33825
-externalPort = 3001
-
 [deployment]
 deploymentTarget = "vm"
 run = ["gunicorn", "--bind=0.0.0.0:5000", "--reuse-port", "--workers=2", "improved_hindi_translator:app"]
