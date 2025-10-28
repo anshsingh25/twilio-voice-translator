@@ -282,9 +282,11 @@ def media_stream(ws, call_sid, participant):
                         config = speech.RecognitionConfig(
                             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
                             sample_rate_hertz=8000,
-                            language_code="hi-IN" if participant == "receiver" else "en-US",
-                            alternative_language_codes=["en-US"] if participant == "receiver" else ["hi-IN"],
+                            language_code="en-US" if participant == "caller" else "hi-IN",
+                            alternative_language_codes=["hi-IN", "en-IN"] if participant == "caller" else ["en-US", "en-IN"],
                             enable_automatic_punctuation=True,
+                            model="latest_long",
+                            use_enhanced=True
                         )
                         
                         response = speech_client.recognize(config=config, audio=audio_content)
