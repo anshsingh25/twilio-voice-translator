@@ -271,7 +271,20 @@ def conference_status():
         conference_participants[conference_name]['conference_sid'] = conference_sid
         
         if event == 'participant-join':
-            participant_sid = request.form.get('ParticipantSid')  # Use ParticipantSid, not CallSid
+            # Fetch the participant_sid using Twilio API
+            # The callback doesn't always provide ParticipantSid, so we need to fetch it
+            participant_sid = None
+            try:
+                if conference_sid and twilio_client:
+                    # List all participants and find the one matching this call_sid
+                    participants = twilio_client.conferences(conference_sid).participants.list()
+                    for p in participants:
+                        if p.call_sid == call_sid:
+                            participant_sid = p.sid
+                            break
+            except Exception as e:
+                print(f"   ⚠️  Error fetching participant SID: {e}")
+            
             print(f"   👤 Participant joined: {call_sid} (ParticipantSid: {participant_sid})")
             
             # Update participant SID
