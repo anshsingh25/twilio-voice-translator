@@ -271,29 +271,17 @@ def conference_status():
         conference_participants[conference_name]['conference_sid'] = conference_sid
         
         if event == 'participant-join':
-            # Fetch the participant_sid using Twilio API
-            # The callback doesn't always provide ParticipantSid, so we need to fetch it
-            participant_sid = None
-            try:
-                if conference_sid and twilio_client:
-                    # List all participants and find the one matching this call_sid
-                    participants = twilio_client.conferences(conference_sid).participants.list()
-                    for p in participants:
-                        if p.call_sid == call_sid:
-                            participant_sid = p.sid
-                            break
-            except Exception as e:
-                print(f"   ⚠️  Error fetching participant SID: {e}")
+            # For Twilio conferences, the call_sid IS the participant identifier
+            # We use call_sid to reference participants when updating them
+            print(f"   👤 Participant joined: {call_sid}")
             
-            print(f"   👤 Participant joined: {call_sid} (ParticipantSid: {participant_sid})")
-            
-            # Update participant SID
+            # Store call_sid as the participant identifier
             if call_sid == conference_participants[conference_name]['caller']['call_sid']:
-                conference_participants[conference_name]['caller']['participant_sid'] = participant_sid
-                print(f"   ✅ Stored caller participant_sid: {participant_sid}")
+                conference_participants[conference_name]['caller']['participant_sid'] = call_sid
+                print(f"   ✅ Stored caller participant_sid: {call_sid}")
             elif 'call_sid' in conference_participants[conference_name]['receiver'] and call_sid == conference_participants[conference_name]['receiver']['call_sid']:
-                conference_participants[conference_name]['receiver']['participant_sid'] = participant_sid
-                print(f"   ✅ Stored receiver participant_sid: {participant_sid}")
+                conference_participants[conference_name]['receiver']['participant_sid'] = call_sid
+                print(f"   ✅ Stored receiver participant_sid: {call_sid}")
         
         elif event == 'conference-end':
             print(f"🧹 Cleaning up conference: {conference_name}")
