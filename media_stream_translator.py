@@ -19,6 +19,7 @@ from google.cloud import texttospeech
 from twilio.rest import Client
 import threading
 import time
+import requests
 
 # Load Google credentials from environment
 google_creds_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON')
@@ -41,10 +42,75 @@ speech_client = speech.SpeechClient()
 translate_client = translate.Client()
 tts_client = texttospeech.TextToSpeechClient()
 
-# Twilio client
-twilio_account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
-twilio_auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
-twilio_client = Client(twilio_account_sid, twilio_auth_token) if twilio_account_sid and twilio_auth_token else None
+# Twilio client - get credentials from Replit connector
+def get_twilio_credentials():
+    """Fetch Twilio credentials from Replit connector"""
+    try:
+        hostname = os.environ.get('REPLIT_CONNECTORS_HOSTNAME')
+        repl_token = os.environ.get('REPL_IDENTITY')
+        web_token = os.environ.get('WEB_REPL_RENEWAL')
+        
+        x_replit_token = None
+        if repl_token:
+            x_replit_token = f'repl {repl_token}'
+        elif web_token:
+            x_replit_token = f'depl {web_token}'
+        
+        if not hostname or not x_replit_token:
+            # Fall back to environment variables
+            account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
+            auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
+            if account_sid and auth_token:
+                return {'account_sid': account_sid, 'auth_token': auth_token}
+            return None
+        
+        # Fetch from Replit connector
+        response = requests.get(
+            f'https://{hostname}/api/v2/connection?include_secrets=true&connector_names=twilio',
+            headers={
+                'Accept': 'application/json',
+                'X_REPLIT_TOKEN': x_replit_token
+            }
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            items = data.get('items', [])
+            if items and len(items) > 0:
+                settings = items[0].get('settings', {})
+                return {
+                    'account_sid': settings.get('account_sid'),
+                    'api_key': settings.get('api_key'),
+                    'api_key_secret': settings.get('api_key_secret')
+                }
+        
+        return None
+    except Exception as e:
+        print(f"Error fetching Twilio credentials: {e}")
+        return None
+
+# Initialize Twilio client
+twilio_creds = get_twilio_credentials()
+twilio_client = None
+
+if twilio_creds:
+    if 'api_key' in twilio_creds and 'api_key_secret' in twilio_creds:
+        # Use API key authentication (from connector)
+        twilio_client = Client(
+            twilio_creds['api_key'],
+            twilio_creds['api_key_secret'],
+            twilio_creds['account_sid']
+        )
+        print(f"✅ Twilio client initialized with API key authentication")
+    elif 'auth_token' in twilio_creds:
+        # Use auth token authentication (from env vars)
+        twilio_client = Client(
+            twilio_creds['account_sid'],
+            twilio_creds['auth_token']
+        )
+        print(f"✅ Twilio client initialized with auth token authentication")
+else:
+    print(f"⚠️  Twilio credentials not found")
 
 # Active streams and conference participants
 active_streams = {}
