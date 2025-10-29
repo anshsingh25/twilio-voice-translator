@@ -482,12 +482,18 @@ def media_stream(ws, conference_name, participant_role):
                                 detected_lang = detect_language(transcript)
                                 print(f"   🔍 Detected language: {detected_lang}")
                                 
-                                # Determine target language and participant
-                                if participant_role == "caller":
+                                # Determine target language based on what was detected
+                                # If they spoke English, translate to Hindi
+                                # If they spoke Hindi, translate to English
+                                if detected_lang == "en":
                                     target_lang = "hi"
-                                    target_role = "receiver"
                                 else:
                                     target_lang = "en"
+                                
+                                # Determine which participant should receive the translation
+                                if participant_role == "caller":
+                                    target_role = "receiver"
+                                else:
                                     target_role = "caller"
                                 
                                 # Translate
