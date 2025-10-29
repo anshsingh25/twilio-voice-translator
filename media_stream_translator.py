@@ -42,10 +42,19 @@ speech_client = speech.SpeechClient()
 translate_client = translate.Client()
 tts_client = texttospeech.TextToSpeechClient()
 
-# Twilio client - get credentials from Replit connector
+# Twilio client - get credentials from environment or Replit connector
 def get_twilio_credentials():
-    """Fetch Twilio credentials from Replit connector"""
+    """Fetch Twilio credentials from environment variables or Replit connector"""
     try:
+        # First, try environment variables (most reliable)
+        account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
+        auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
+        
+        if account_sid and auth_token:
+            print(f"✅ Found Twilio credentials in environment variables")
+            return {'account_sid': account_sid, 'auth_token': auth_token}
+        
+        # Fall back to Replit connector if env vars not found
         hostname = os.environ.get('REPLIT_CONNECTORS_HOSTNAME')
         repl_token = os.environ.get('REPL_IDENTITY')
         web_token = os.environ.get('WEB_REPL_RENEWAL')
@@ -57,11 +66,7 @@ def get_twilio_credentials():
             x_replit_token = f'depl {web_token}'
         
         if not hostname or not x_replit_token:
-            # Fall back to environment variables
-            account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
-            auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
-            if account_sid and auth_token:
-                return {'account_sid': account_sid, 'auth_token': auth_token}
+            print(f"⚠️  No Twilio credentials found in environment or connector")
             return None
         
         # Fetch from Replit connector
@@ -78,6 +83,7 @@ def get_twilio_credentials():
             items = data.get('items', [])
             if items and len(items) > 0:
                 settings = items[0].get('settings', {})
+                print(f"✅ Found Twilio credentials in Replit connector")
                 return {
                     'account_sid': settings.get('account_sid'),
                     'api_key': settings.get('api_key'),
@@ -86,7 +92,13 @@ def get_twilio_credentials():
         
         return None
     except Exception as e:
-        print(f"Error fetching Twilio credentials: {e}")
+        print(f"❌ Error fetching Twilio credentials: {e}")
+        # Try environment variables as last resort
+        account_sid = os.environ.get('TWILIO_ACCOUNT_SID')
+        auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
+        if account_sid and auth_token:
+            print(f"✅ Using environment variables as fallback")
+            return {'account_sid': account_sid, 'auth_token': auth_token}
         return None
 
 # Initialize Twilio client
