@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
 Real-time Bidirectional Voice Translator with Twilio Media Streams
-Optimized for low latency and faster processing
+TRUE streaming recognition with async processing for ultra-low latency
 """
 
 import os
 import json
 import base64
-import asyncio
 import audioop
 from collections import defaultdict
 from datetime import datetime
@@ -21,8 +20,7 @@ import threading
 import time
 import requests
 from concurrent.futures import ThreadPoolExecutor
-import wave
-import io
+import queue
 
 # Load Google credentials from environment
 google_creds_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON')
@@ -46,10 +44,13 @@ translate_client = translate.Client()
 tts_client = texttospeech.TextToSpeechClient()
 
 # Thread pool for parallel processing
-executor = ThreadPoolExecutor(max_workers=10)
+executor = ThreadPoolExecutor(max_workers=20)
 
 # Translation cache for common phrases
 translation_cache = {}
+
+# Active audio queues for streaming
+audio_queues = {}
 
 # Twilio client - get credentials from environment or Replit connector
 def get_twilio_credentials():
@@ -142,7 +143,7 @@ def generate_comfort_tone():
     """Generate a short, subtle comfort tone"""
     try:
         # Short beep using TTS
-        synthesis_input = texttospeech.SynthesisInput(ssml='<speak><break time="200ms"/></speak>')
+        synthesis_input = texttospeech.SynthesisInput(ssml='<speak><break time="150ms"/></speak>')
         
         voice = texttospeech.VoiceSelectionParams(
             language_code="en-US",
@@ -181,15 +182,16 @@ COMFORT_TONE = generate_comfort_tone()
 def home():
     return {
         "message": "Real-time Bidirectional Voice Translator",
-        "version": "6.0.0 - Low Latency Optimized",
+        "version": "7.0.0 - True Streaming with Async Processing",
         "status": "Ready",
         "features": [
             "Real-time English → Hindi translation",
             "Real-time Hindi → English translation",
-            "Low latency processing",
+            "TRUE streaming recognition",
+            "Ultra-low latency",
             "Comfort audio during translation",
-            "Parallel processing",
-            "Streaming recognition"
+            "Async parallel processing",
+            "Translation caching"
         ]
     }, 200
 
@@ -422,7 +424,7 @@ def synthesize_speech_url(text, language_code, conference_name):
         # Audio configuration - MP3 for better quality and size, faster speaking rate
         audio_config = texttospeech.AudioConfig(
             audio_encoding=texttospeech.AudioEncoding.MP3,
-            speaking_rate=1.1  # Slightly faster for lower latency
+            speaking_rate=1.15  # Slightly faster for lower latency
         )
         
         response = tts_client.synthesize_speech(
@@ -432,7 +434,7 @@ def synthesize_speech_url(text, language_code, conference_name):
         )
         
         # Save to file
-        timestamp = int(time.time() * 1000)
+        timestamp = int(time.time() * 1000000)
         filename = f"tts_{timestamp}.mp3"
         filepath = f"static/{filename}"
         
@@ -465,7 +467,6 @@ def play_audio_to_participant(conference_sid, participant_sid, audio_filename):
             announce_url=announce_twiml_url,
             announce_method='GET'
         )
-        print(f"   🔊 Playing audio to participant {participant_sid}")
         return True
     except Exception as e:
         print(f"   ❌ Error playing audio: {e}")
@@ -483,99 +484,150 @@ def play_comfort_tone(conference_sid, participant_sid):
         except Exception as e:
             pass  # Silently fail for comfort tone
 
-def process_and_translate(audio_pcm, participant_role, conference_name, primary_lang, alt_langs, last_transcript):
-    """Process audio, translate, and play to other participant - OPTIMIZED FOR SPEED"""
-    try:
-        # Transcribe with Google Speech-to-Text
-        audio_content = speech.RecognitionAudio(content=audio_pcm)
-        config = speech.RecognitionConfig(
+def stream_audio_processor(audio_queue, stream_id, participant_role, conference_name, primary_lang, alt_langs):
+    """
+    ASYNC processor that consumes audio from queue and performs streaming recognition
+    This runs in a separate thread to keep the WebSocket non-blocking
+    """
+    print(f"🎯 Started audio processor thread for {stream_id} ({participant_role})")
+    
+    last_transcript = ""
+    last_timestamp = time.time()
+    
+    # Create streaming config
+    config = speech.StreamingRecognitionConfig(
+        config=speech.RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
             sample_rate_hertz=8000,
             language_code=primary_lang,
             alternative_language_codes=alt_langs,
             enable_automatic_punctuation=True,
             model="latest_short",
-            use_enhanced=True  # Use enhanced model for better accuracy
-        )
+            use_enhanced=True
+        ),
+        interim_results=True,  # Get interim results for faster response
+        single_utterance=False
+    )
+    
+    def request_generator():
+        """Generate audio chunks for streaming recognition"""
+        while stream_id in audio_queues:
+            try:
+                audio_chunk = audio_queue.get(timeout=0.5)
+                if audio_chunk is None:  # Shutdown signal
+                    break
+                yield speech.StreamingRecognizeRequest(audio_content=audio_chunk)
+            except queue.Empty:
+                continue
+    
+    try:
+        # Use streaming_recognize for true streaming with interim results
+        responses = speech_client.streaming_recognize(config, request_generator())
         
-        response = speech_client.recognize(config=config, audio=audio_content)
-        
-        for result in response.results:
-            transcript = result.alternatives[0].transcript.strip()
-            confidence = result.alternatives[0].confidence
-            
-            # Lower confidence threshold for faster response
-            if confidence > 0.5 and transcript and transcript != last_transcript:
-                print(f"\n🎤 {participant_role.upper()} spoke: {transcript} (confidence: {confidence:.2f})")
+        for response in responses:
+            if stream_id not in audio_queues:  # Stream closed
+                break
                 
-                # Detect language
-                detected_lang = detect_language(transcript)
-                print(f"   🔍 Detected language: {detected_lang}")
-                
-                # Determine target language based on what was detected
-                # If they spoke English, translate to Hindi
-                # If they spoke Hindi, translate to English
-                if detected_lang == "en":
-                    target_lang = "hi"
-                else:
-                    target_lang = "en"
-                
-                # Determine which participant should receive the translation
-                if participant_role == "caller":
-                    target_role = "receiver"
-                else:
-                    target_role = "caller"
-                
-                if conference_name in conference_participants:
-                    conf_info = conference_participants[conference_name]
-                    conference_sid = conf_info.get('conference_sid')
-                    target_participant = conf_info.get(target_role, {})
-                    target_participant_sid = target_participant.get('participant_sid')
+            for result in response.results:
+                if not result.alternatives:
+                    continue
                     
-                    # Play comfort tone immediately to target participant
-                    if conference_sid and target_participant_sid and COMFORT_TONE:
-                        executor.submit(play_comfort_tone, conference_sid, target_participant_sid)
+                transcript = result.alternatives[0].transcript.strip()
+                confidence = result.alternatives[0].confidence if result.is_final else 0.7
+                is_final = result.is_final
+                
+                # Process final results with good confidence, or interim results if enough time passed
+                current_time = time.time()
+                time_since_last = current_time - last_timestamp
+                
+                should_process = (
+                    (is_final and confidence > 0.5 and transcript != last_transcript) or
+                    (not is_final and time_since_last > 1.5 and len(transcript) > 5 and transcript != last_transcript)
+                )
+                
+                if should_process and transcript:
+                    print(f"\n🎤 {participant_role.upper()} {'[FINAL]' if is_final else '[INTERIM]'}: {transcript} (conf: {confidence:.2f})")
+                    last_transcript = transcript
+                    last_timestamp = current_time
                     
-                    # Translate and TTS in parallel
-                    def translate_and_synth():
-                        translated_text = translate_text(transcript, detected_lang, target_lang)
-                        print(f"   🔄 Translated to {target_lang}: {translated_text}")
+                    # Detect language
+                    detected_lang = detect_language(transcript)
+                    print(f"   🔍 Detected language: {detected_lang}")
+                    
+                    # Determine target language
+                    target_lang = "hi" if detected_lang == "en" else "en"
+                    target_role = "receiver" if participant_role == "caller" else "caller"
+                    
+                    if conference_name in conference_participants:
+                        conf_info = conference_participants[conference_name]
+                        conference_sid = conf_info.get('conference_sid')
+                        target_participant = conf_info.get(target_role, {})
+                        target_participant_sid = target_participant.get('participant_sid')
                         
-                        audio_filename = synthesize_speech_url(translated_text, target_lang, conference_name)
+                        # Play comfort tone immediately
+                        if conference_sid and target_participant_sid and COMFORT_TONE:
+                            executor.submit(play_comfort_tone, conference_sid, target_participant_sid)
                         
-                        if audio_filename and conference_sid and target_participant_sid:
-                            # Play translated audio to the other participant
-                            play_audio_to_participant(conference_sid, target_participant_sid, audio_filename)
-                            print(f"   ✅ Translation delivered to {target_role}")
-                        elif not target_participant_sid:
-                            print(f"   ⚠️  Target participant not ready yet")
-                    
-                    # Submit to thread pool for parallel processing
-                    executor.submit(translate_and_synth)
-                
-                return transcript
+                        # Translate and synthesize in parallel thread
+                        def translate_and_play():
+                            translated_text = translate_text(transcript, detected_lang, target_lang)
+                            print(f"   🔄 Translated to {target_lang}: {translated_text}")
+                            
+                            audio_filename = synthesize_speech_url(translated_text, target_lang, conference_name)
+                            
+                            if audio_filename and conference_sid and target_participant_sid:
+                                play_audio_to_participant(conference_sid, target_participant_sid, audio_filename)
+                                print(f"   ✅ Translation delivered to {target_role}")
+                        
+                        executor.submit(translate_and_play)
     
     except Exception as e:
-        print(f"   ❌ Processing error: {e}")
+        print(f"❌ Stream processor error for {stream_id}: {e}")
         import traceback
         traceback.print_exc()
-    
-    return last_transcript
+    finally:
+        print(f"🛑 Audio processor thread stopped for {stream_id}")
 
 @sock.route('/media-stream/<conference_name>/<participant_role>')
 def media_stream(ws, conference_name, participant_role):
-    """Handle Twilio Media Streams for real-time audio processing - OPTIMIZED FOR LOW LATENCY"""
+    """
+    Handle Twilio Media Streams - NON-BLOCKING with async audio processing
+    Audio is queued immediately and processed by a separate thread
+    """
     
     stream_sid = None
+    stream_id = f"{conference_name}:{participant_role}"
+    
+    # Create audio queue for this stream
+    audio_queue = queue.Queue(maxsize=100)
+    audio_queues[stream_id] = audio_queue
+    
+    # Buffer for accumulating small chunks
     audio_buffer = bytearray()
-    last_transcript = ""
     
     print(f"\n{'='*60}")
-    print(f"🔌 WebSocket CONNECTED")
+    print(f"🔌 WebSocket CONNECTED (NON-BLOCKING)")
     print(f"   Conference: {conference_name}")
     print(f"   Role: {participant_role}")
+    print(f"   Stream ID: {stream_id}")
     print(f"   Time: {datetime.now().strftime('%H:%M:%S')}")
     print(f"{'='*60}\n")
+    
+    # Determine language config
+    if participant_role == "caller":
+        primary_lang = "en-US"
+        alt_langs = ["hi-IN", "en-IN"]
+    else:
+        primary_lang = "hi-IN"
+        alt_langs = ["en-US", "en-IN"]
+    
+    # Start async processor thread
+    processor_thread = threading.Thread(
+        target=stream_audio_processor,
+        args=(audio_queue, stream_id, participant_role, conference_name, primary_lang, alt_langs),
+        daemon=True
+    )
+    processor_thread.start()
     
     try:
         while True:
@@ -594,43 +646,28 @@ def media_stream(ws, conference_name, participant_role):
                 print(f"🎤 Stream started: {stream_sid}")
                 
             elif event == 'media':
-                # Receive audio payload (mulaw, base64 encoded)
+                # CRITICAL: Process audio IMMEDIATELY without blocking
                 payload = data['media']['payload']
                 audio_chunk = base64.b64decode(payload)
                 audio_buffer.extend(audio_chunk)
                 
-                # OPTIMIZED: Process when buffer reaches ~1 second (8000 bytes at 8kHz)
-                # Reduced from 16000 bytes (2 seconds) for LOWER LATENCY
-                if len(audio_buffer) >= 8000:
+                # Queue audio chunks for async processing (smaller chunks for lower latency)
+                if len(audio_buffer) >= 4000:  # ~500ms at 8kHz for ultra-low latency
                     try:
-                        # Convert mulaw to linear PCM for Google Speech-to-Text
+                        # Convert mulaw to linear PCM
                         audio_pcm = audioop.ulaw2lin(bytes(audio_buffer), 2)
                         
-                        # Determine language based on participant role
-                        if participant_role == "caller":
-                            primary_lang = "en-US"
-                            alt_langs = ["hi-IN", "en-IN"]
-                        else:  # receiver
-                            primary_lang = "hi-IN"
-                            alt_langs = ["en-US", "en-IN"]
+                        # Queue for async processing - non-blocking
+                        audio_queue.put_nowait(audio_pcm)
                         
-                        # Process in parallel - non-blocking
-                        last_transcript = process_and_translate(
-                            audio_pcm, 
-                            participant_role, 
-                            conference_name, 
-                            primary_lang, 
-                            alt_langs, 
-                            last_transcript
-                        )
-                    
+                        # Clear buffer immediately
+                        audio_buffer = bytearray()
+                    except queue.Full:
+                        # If queue full, clear buffer to avoid buildup
+                        audio_buffer = bytearray()
                     except Exception as e:
-                        print(f"   ❌ Processing error: {e}")
-                        import traceback
-                        traceback.print_exc()
-                    
-                    # Clear buffer
-                    audio_buffer = bytearray()
+                        print(f"   ⚠️  Queue error: {e}")
+                        audio_buffer = bytearray()
             
             elif event == 'stop':
                 print(f"⏹️  Stream stopped: {stream_sid}")
@@ -642,6 +679,11 @@ def media_stream(ws, conference_name, participant_role):
         traceback.print_exc()
     
     finally:
+        # Cleanup
+        if stream_id in audio_queues:
+            audio_queue.put(None)  # Shutdown signal
+            del audio_queues[stream_id]
+        
         print(f"\n{'='*60}")
         print(f"🔌 WebSocket DISCONNECTED")
         print(f"   Conference: {conference_name}")
@@ -667,7 +709,8 @@ def serve_static(filename):
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))
     print(f"\n{'='*60}")
-    print(f"🚀 LOW LATENCY TRANSLATOR - OPTIMIZED")
+    print(f"🚀 ULTRA-LOW LATENCY TRANSLATOR")
+    print(f"   TRUE Streaming Recognition + Async Processing")
     print(f"{'='*60}")
     print(f"Port: {port}")
     print(f"Domain: {app_domain}")
@@ -677,11 +720,13 @@ if __name__ == "__main__":
     print(f"📞 Features:")
     print(f"   ✓ Real-time English → Hindi translation")
     print(f"   ✓ Real-time Hindi → English translation")
-    print(f"   ✓ LOW LATENCY (1 second buffer)")
+    print(f"   ✓ TRUE streaming Google STT (interim results)")
+    print(f"   ✓ ULTRA-LOW LATENCY (500ms buffer)")
+    print(f"   ✓ Non-blocking WebSocket processing")
+    print(f"   ✓ Async audio queue architecture")
     print(f"   ✓ Comfort audio during processing")
-    print(f"   ✓ Parallel processing for speed")
+    print(f"   ✓ Parallel translation & TTS")
     print(f"   ✓ Translation caching")
-    print(f"   ✓ Enhanced speech recognition")
     print(f"{'='*60}\n")
     
     app.run(host='0.0.0.0', port=port, debug=False)
