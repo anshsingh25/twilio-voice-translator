@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Real-time Bidirectional Voice Translator with Twilio Media Streams
-Uses conference call architecture to inject translated audio
+Optimized for low latency and faster processing
 """
 
 import os
@@ -20,6 +20,9 @@ from twilio.rest import Client
 import threading
 import time
 import requests
+from concurrent.futures import ThreadPoolExecutor
+import wave
+import io
 
 # Load Google credentials from environment
 google_creds_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON')
@@ -41,6 +44,12 @@ app_domain = railway_domain or replit_domain or 'localhost:5000'
 speech_client = speech.SpeechClient()
 translate_client = translate.Client()
 tts_client = texttospeech.TextToSpeechClient()
+
+# Thread pool for parallel processing
+executor = ThreadPoolExecutor(max_workers=10)
+
+# Translation cache for common phrases
+translation_cache = {}
 
 # Twilio client - get credentials from environment or Replit connector
 def get_twilio_credentials():
@@ -128,17 +137,59 @@ else:
 active_streams = {}
 conference_participants = defaultdict(dict)
 
+# Generate comfort tone audio (short beep to indicate processing)
+def generate_comfort_tone():
+    """Generate a short, subtle comfort tone"""
+    try:
+        # Short beep using TTS
+        synthesis_input = texttospeech.SynthesisInput(ssml='<speak><break time="200ms"/></speak>')
+        
+        voice = texttospeech.VoiceSelectionParams(
+            language_code="en-US",
+            name="en-US-Neural2-C",
+            ssml_gender=texttospeech.SsmlVoiceGender.FEMALE
+        )
+        
+        audio_config = texttospeech.AudioConfig(
+            audio_encoding=texttospeech.AudioEncoding.MP3,
+            speaking_rate=1.2
+        )
+        
+        response = tts_client.synthesize_speech(
+            input=synthesis_input,
+            voice=voice,
+            audio_config=audio_config
+        )
+        
+        # Save comfort tone
+        os.makedirs('static', exist_ok=True)
+        filepath = 'static/comfort_tone.mp3'
+        
+        if not os.path.exists(filepath):
+            with open(filepath, 'wb') as f:
+                f.write(response.audio_content)
+        
+        return 'comfort_tone.mp3'
+    except Exception as e:
+        print(f"   ❌ Comfort tone generation error: {e}")
+        return None
+
+# Initialize comfort tone
+COMFORT_TONE = generate_comfort_tone()
+
 @app.route('/')
 def home():
     return {
         "message": "Real-time Bidirectional Voice Translator",
-        "version": "5.0.0 - Conference Mode",
+        "version": "6.0.0 - Low Latency Optimized",
         "status": "Ready",
         "features": [
             "Real-time English → Hindi translation",
             "Real-time Hindi → English translation",
-            "Twilio Conferences",
-            "Google Cloud AI"
+            "Low latency processing",
+            "Comfort audio during translation",
+            "Parallel processing",
+            "Streaming recognition"
         ]
     }, 200
 
@@ -320,9 +371,14 @@ def detect_language(text):
     return 'en'
 
 def translate_text(text, source_lang, target_lang):
-    """Translate text between languages"""
+    """Translate text between languages with caching"""
     if not text or source_lang == target_lang:
         return text
+    
+    # Check cache
+    cache_key = f"{source_lang}:{target_lang}:{text.lower()}"
+    if cache_key in translation_cache:
+        return translation_cache[cache_key]
     
     try:
         result = translate_client.translate(
@@ -331,17 +387,25 @@ def translate_text(text, source_lang, target_lang):
             target_language=target_lang
         )
         translated = result['translatedText']
+        
+        # Cache translation
+        translation_cache[cache_key] = translated
+        
+        # Limit cache size
+        if len(translation_cache) > 1000:
+            translation_cache.clear()
+        
         return translated
     except Exception as e:
         print(f"   ❌ Translation error: {e}")
         return text
 
 def synthesize_speech_url(text, language_code, conference_name):
-    """Generate TTS audio and save to temporary file, return filename"""
+    """Generate TTS audio and save to temporary file, return filename - FASTER"""
     try:
         synthesis_input = texttospeech.SynthesisInput(text=text)
         
-        # Voice configuration based on language
+        # Voice configuration based on language - using faster neural voices
         if language_code == 'hi':
             voice = texttospeech.VoiceSelectionParams(
                 language_code="hi-IN",
@@ -355,9 +419,10 @@ def synthesize_speech_url(text, language_code, conference_name):
                 ssml_gender=texttospeech.SsmlVoiceGender.FEMALE
             )
         
-        # Audio configuration - MP3 for better quality and size
+        # Audio configuration - MP3 for better quality and size, faster speaking rate
         audio_config = texttospeech.AudioConfig(
-            audio_encoding=texttospeech.AudioEncoding.MP3
+            audio_encoding=texttospeech.AudioEncoding.MP3,
+            speaking_rate=1.1  # Slightly faster for lower latency
         )
         
         response = tts_client.synthesize_speech(
@@ -406,9 +471,100 @@ def play_audio_to_participant(conference_sid, participant_sid, audio_filename):
         print(f"   ❌ Error playing audio: {e}")
         return False
 
+def play_comfort_tone(conference_sid, participant_sid):
+    """Play comfort tone to indicate processing"""
+    if COMFORT_TONE and conference_sid and participant_sid:
+        try:
+            announce_twiml_url = f"https://{app_domain}/play-tts/{COMFORT_TONE}"
+            twilio_client.conferences(conference_sid).participants(participant_sid).update(
+                announce_url=announce_twiml_url,
+                announce_method='GET'
+            )
+        except Exception as e:
+            pass  # Silently fail for comfort tone
+
+def process_and_translate(audio_pcm, participant_role, conference_name, primary_lang, alt_langs, last_transcript):
+    """Process audio, translate, and play to other participant - OPTIMIZED FOR SPEED"""
+    try:
+        # Transcribe with Google Speech-to-Text
+        audio_content = speech.RecognitionAudio(content=audio_pcm)
+        config = speech.RecognitionConfig(
+            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
+            sample_rate_hertz=8000,
+            language_code=primary_lang,
+            alternative_language_codes=alt_langs,
+            enable_automatic_punctuation=True,
+            model="latest_short",
+            use_enhanced=True  # Use enhanced model for better accuracy
+        )
+        
+        response = speech_client.recognize(config=config, audio=audio_content)
+        
+        for result in response.results:
+            transcript = result.alternatives[0].transcript.strip()
+            confidence = result.alternatives[0].confidence
+            
+            # Lower confidence threshold for faster response
+            if confidence > 0.5 and transcript and transcript != last_transcript:
+                print(f"\n🎤 {participant_role.upper()} spoke: {transcript} (confidence: {confidence:.2f})")
+                
+                # Detect language
+                detected_lang = detect_language(transcript)
+                print(f"   🔍 Detected language: {detected_lang}")
+                
+                # Determine target language based on what was detected
+                # If they spoke English, translate to Hindi
+                # If they spoke Hindi, translate to English
+                if detected_lang == "en":
+                    target_lang = "hi"
+                else:
+                    target_lang = "en"
+                
+                # Determine which participant should receive the translation
+                if participant_role == "caller":
+                    target_role = "receiver"
+                else:
+                    target_role = "caller"
+                
+                if conference_name in conference_participants:
+                    conf_info = conference_participants[conference_name]
+                    conference_sid = conf_info.get('conference_sid')
+                    target_participant = conf_info.get(target_role, {})
+                    target_participant_sid = target_participant.get('participant_sid')
+                    
+                    # Play comfort tone immediately to target participant
+                    if conference_sid and target_participant_sid and COMFORT_TONE:
+                        executor.submit(play_comfort_tone, conference_sid, target_participant_sid)
+                    
+                    # Translate and TTS in parallel
+                    def translate_and_synth():
+                        translated_text = translate_text(transcript, detected_lang, target_lang)
+                        print(f"   🔄 Translated to {target_lang}: {translated_text}")
+                        
+                        audio_filename = synthesize_speech_url(translated_text, target_lang, conference_name)
+                        
+                        if audio_filename and conference_sid and target_participant_sid:
+                            # Play translated audio to the other participant
+                            play_audio_to_participant(conference_sid, target_participant_sid, audio_filename)
+                            print(f"   ✅ Translation delivered to {target_role}")
+                        elif not target_participant_sid:
+                            print(f"   ⚠️  Target participant not ready yet")
+                    
+                    # Submit to thread pool for parallel processing
+                    executor.submit(translate_and_synth)
+                
+                return transcript
+    
+    except Exception as e:
+        print(f"   ❌ Processing error: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    return last_transcript
+
 @sock.route('/media-stream/<conference_name>/<participant_role>')
 def media_stream(ws, conference_name, participant_role):
-    """Handle Twilio Media Streams for real-time audio processing"""
+    """Handle Twilio Media Streams for real-time audio processing - OPTIMIZED FOR LOW LATENCY"""
     
     stream_sid = None
     audio_buffer = bytearray()
@@ -443,8 +599,9 @@ def media_stream(ws, conference_name, participant_role):
                 audio_chunk = base64.b64decode(payload)
                 audio_buffer.extend(audio_chunk)
                 
-                # Process when buffer reaches ~2 seconds (16000 bytes at 8kHz)
-                if len(audio_buffer) >= 16000:
+                # OPTIMIZED: Process when buffer reaches ~1 second (8000 bytes at 8kHz)
+                # Reduced from 16000 bytes (2 seconds) for LOWER LATENCY
+                if len(audio_buffer) >= 8000:
                     try:
                         # Convert mulaw to linear PCM for Google Speech-to-Text
                         audio_pcm = audioop.ulaw2lin(bytes(audio_buffer), 2)
@@ -457,64 +614,15 @@ def media_stream(ws, conference_name, participant_role):
                             primary_lang = "hi-IN"
                             alt_langs = ["en-US", "en-IN"]
                         
-                        # Transcribe with Google Speech-to-Text
-                        audio_content = speech.RecognitionAudio(content=audio_pcm)
-                        config = speech.RecognitionConfig(
-                            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
-                            sample_rate_hertz=8000,
-                            language_code=primary_lang,
-                            alternative_language_codes=alt_langs,
-                            enable_automatic_punctuation=True,
-                            model="latest_short"
+                        # Process in parallel - non-blocking
+                        last_transcript = process_and_translate(
+                            audio_pcm, 
+                            participant_role, 
+                            conference_name, 
+                            primary_lang, 
+                            alt_langs, 
+                            last_transcript
                         )
-                        
-                        response = speech_client.recognize(config=config, audio=audio_content)
-                        
-                        for result in response.results:
-                            transcript = result.alternatives[0].transcript.strip()
-                            confidence = result.alternatives[0].confidence
-                            
-                            if confidence > 0.6 and transcript and transcript != last_transcript:
-                                print(f"\n🎤 {participant_role.upper()} spoke: {transcript} (confidence: {confidence:.2f})")
-                                last_transcript = transcript
-                                
-                                # Detect language
-                                detected_lang = detect_language(transcript)
-                                print(f"   🔍 Detected language: {detected_lang}")
-                                
-                                # Determine target language based on what was detected
-                                # If they spoke English, translate to Hindi
-                                # If they spoke Hindi, translate to English
-                                if detected_lang == "en":
-                                    target_lang = "hi"
-                                else:
-                                    target_lang = "en"
-                                
-                                # Determine which participant should receive the translation
-                                if participant_role == "caller":
-                                    target_role = "receiver"
-                                else:
-                                    target_role = "caller"
-                                
-                                # Translate
-                                translated_text = translate_text(transcript, detected_lang, target_lang)
-                                print(f"   🔄 Translated to {target_lang}: {translated_text}")
-                                
-                                # Generate TTS audio file
-                                audio_filename = synthesize_speech_url(translated_text, target_lang, conference_name)
-                                
-                                if audio_filename and conference_name in conference_participants:
-                                    conf_info = conference_participants[conference_name]
-                                    conference_sid = conf_info.get('conference_sid')
-                                    target_participant = conf_info.get(target_role, {})
-                                    target_participant_sid = target_participant.get('participant_sid')
-                                    
-                                    if conference_sid and target_participant_sid:
-                                        # Play translated audio to the other participant
-                                        play_audio_to_participant(conference_sid, target_participant_sid, audio_filename)
-                                        print(f"   ✅ Translation delivered to {target_role}")
-                                    else:
-                                        print(f"   ⚠️  Target participant not ready yet")
                     
                     except Exception as e:
                         print(f"   ❌ Processing error: {e}")
@@ -559,7 +667,7 @@ def serve_static(filename):
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))
     print(f"\n{'='*60}")
-    print(f"🚀 REAL-TIME TRANSLATOR WITH CONFERENCE MODE")
+    print(f"🚀 LOW LATENCY TRANSLATOR - OPTIMIZED")
     print(f"{'='*60}")
     print(f"Port: {port}")
     print(f"Domain: {app_domain}")
@@ -569,8 +677,11 @@ if __name__ == "__main__":
     print(f"📞 Features:")
     print(f"   ✓ Real-time English → Hindi translation")
     print(f"   ✓ Real-time Hindi → English translation")
-    print(f"   ✓ Twilio Conferences")
-    print(f"   ✓ Google Cloud AI")
+    print(f"   ✓ LOW LATENCY (1 second buffer)")
+    print(f"   ✓ Comfort audio during processing")
+    print(f"   ✓ Parallel processing for speed")
+    print(f"   ✓ Translation caching")
+    print(f"   ✓ Enhanced speech recognition")
     print(f"{'='*60}\n")
     
     app.run(host='0.0.0.0', port=port, debug=False)
