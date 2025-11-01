@@ -487,12 +487,14 @@ def play_comfort_tone(conference_sid, participant_sid):
 def stream_audio_processor(audio_queue, stream_id, participant_role, conference_name, primary_lang, alt_langs):
     """
     ASYNC processor that consumes audio from queue and performs streaming recognition
+    Automatically restarts every 50 seconds to avoid Google's 60-second limit
     This runs in a separate thread to keep the WebSocket non-blocking
     """
     print(f"🎯 Started audio processor thread for {stream_id} ({participant_role})")
     
     last_transcript = ""
     last_timestamp = time.time()
+    session_count = 0
     
     # Create streaming config
     config = speech.StreamingRecognitionConfig(
@@ -509,84 +511,104 @@ def stream_audio_processor(audio_queue, stream_id, participant_role, conference_
         single_utterance=False
     )
     
-    def request_generator():
-        """Generate audio chunks for streaming recognition"""
-        while stream_id in audio_queues:
-            try:
-                audio_chunk = audio_queue.get(timeout=0.5)
-                if audio_chunk is None:  # Shutdown signal
-                    break
-                yield speech.StreamingRecognizeRequest(audio_content=audio_chunk)
-            except queue.Empty:
-                continue
-    
-    try:
-        # Use streaming_recognize for true streaming with interim results
-        responses = speech_client.streaming_recognize(config, request_generator())
+    # CONTINUOUS LOOP - Restart streaming session every 50 seconds to avoid 60-second timeout
+    while stream_id in audio_queues:
+        session_count += 1
+        session_start_time = time.time()
+        print(f"🔄 Starting streaming session #{session_count} for {participant_role}")
         
-        for response in responses:
-            if stream_id not in audio_queues:  # Stream closed
-                break
-                
-            for result in response.results:
-                if not result.alternatives:
+        def request_generator():
+            """Generate audio chunks for streaming recognition"""
+            while stream_id in audio_queues:
+                # Auto-restart after 50 seconds to avoid Google's 60-second limit
+                if time.time() - session_start_time > 50:
+                    print(f"⏰ Session #{session_count} reached 50s limit, restarting...")
+                    break
+                    
+                try:
+                    audio_chunk = audio_queue.get(timeout=0.5)
+                    if audio_chunk is None:  # Shutdown signal
+                        break
+                    yield speech.StreamingRecognizeRequest(audio_content=audio_chunk)
+                except queue.Empty:
                     continue
+        
+        try:
+            # Use streaming_recognize for true streaming with interim results
+            responses = speech_client.streaming_recognize(config, request_generator())
+            
+            for response in responses:
+                if stream_id not in audio_queues:  # Stream closed
+                    break
                     
-                transcript = result.alternatives[0].transcript.strip()
-                confidence = result.alternatives[0].confidence if result.is_final else 0.7
-                is_final = result.is_final
-                
-                # Process final results with good confidence, or interim results if enough time passed
-                current_time = time.time()
-                time_since_last = current_time - last_timestamp
-                
-                should_process = (
-                    (is_final and confidence > 0.5 and transcript != last_transcript) or
-                    (not is_final and time_since_last > 1.5 and len(transcript) > 5 and transcript != last_transcript)
-                )
-                
-                if should_process and transcript:
-                    print(f"\n🎤 {participant_role.upper()} {'[FINAL]' if is_final else '[INTERIM]'}: {transcript} (conf: {confidence:.2f})")
-                    last_transcript = transcript
-                    last_timestamp = current_time
-                    
-                    # Detect language
-                    detected_lang = detect_language(transcript)
-                    print(f"   🔍 Detected language: {detected_lang}")
-                    
-                    # Determine target language
-                    target_lang = "hi" if detected_lang == "en" else "en"
-                    target_role = "receiver" if participant_role == "caller" else "caller"
-                    
-                    if conference_name in conference_participants:
-                        conf_info = conference_participants[conference_name]
-                        conference_sid = conf_info.get('conference_sid')
-                        target_participant = conf_info.get(target_role, {})
-                        target_participant_sid = target_participant.get('participant_sid')
+                for result in response.results:
+                    if not result.alternatives:
+                        continue
                         
-                        # Play comfort tone immediately
-                        if conference_sid and target_participant_sid and COMFORT_TONE:
-                            executor.submit(play_comfort_tone, conference_sid, target_participant_sid)
+                    transcript = result.alternatives[0].transcript.strip()
+                    confidence = result.alternatives[0].confidence if result.is_final else 0.7
+                    is_final = result.is_final
+                    
+                    # Process final results with good confidence, or interim results if enough time passed
+                    current_time = time.time()
+                    time_since_last = current_time - last_timestamp
+                    
+                    should_process = (
+                        (is_final and confidence > 0.5 and transcript != last_transcript) or
+                        (not is_final and time_since_last > 1.5 and len(transcript) > 5 and transcript != last_transcript)
+                    )
+                    
+                    if should_process and transcript:
+                        print(f"\n🎤 {participant_role.upper()} {'[FINAL]' if is_final else '[INTERIM]'}: {transcript} (conf: {confidence:.2f})")
+                        last_transcript = transcript
+                        last_timestamp = current_time
                         
-                        # Translate and synthesize in parallel thread
-                        def translate_and_play():
-                            translated_text = translate_text(transcript, detected_lang, target_lang)
-                            print(f"   🔄 Translated to {target_lang}: {translated_text}")
+                        # Detect language
+                        detected_lang = detect_language(transcript)
+                        print(f"   🔍 Detected language: {detected_lang}")
+                        
+                        # Determine target language
+                        target_lang = "hi" if detected_lang == "en" else "en"
+                        target_role = "receiver" if participant_role == "caller" else "caller"
+                        
+                        if conference_name in conference_participants:
+                            conf_info = conference_participants[conference_name]
+                            conference_sid = conf_info.get('conference_sid')
+                            target_participant = conf_info.get(target_role, {})
+                            target_participant_sid = target_participant.get('participant_sid')
                             
-                            audio_filename = synthesize_speech_url(translated_text, target_lang, conference_name)
+                            # Play comfort tone immediately
+                            if conference_sid and target_participant_sid and COMFORT_TONE:
+                                executor.submit(play_comfort_tone, conference_sid, target_participant_sid)
                             
-                            if audio_filename and conference_sid and target_participant_sid:
-                                play_audio_to_participant(conference_sid, target_participant_sid, audio_filename)
-                                print(f"   ✅ Translation delivered to {target_role}")
-                        
-                        executor.submit(translate_and_play)
+                            # Translate and synthesize in parallel thread
+                            def translate_and_play():
+                                translated_text = translate_text(transcript, detected_lang, target_lang)
+                                print(f"   🔄 Translated to {target_lang}: {translated_text}")
+                                
+                                audio_filename = synthesize_speech_url(translated_text, target_lang, conference_name)
+                                
+                                if audio_filename and conference_sid and target_participant_sid:
+                                    play_audio_to_participant(conference_sid, target_participant_sid, audio_filename)
+                                    print(f"   ✅ Translation delivered to {target_role}")
+                            
+                            executor.submit(translate_and_play)
+        
+        except Exception as e:
+            print(f"❌ Stream processor error for {stream_id} session #{session_count}: {e}")
+            import traceback
+            traceback.print_exc()
+            # Wait a bit before restarting after error
+            time.sleep(1)
+        
+        # Check if we should continue (stream still active)
+        if stream_id not in audio_queues:
+            break
+        
+        # Brief pause before restarting session
+        time.sleep(0.1)
     
-    except Exception as e:
-        print(f"❌ Stream processor error for {stream_id}: {e}")
-        import traceback
-        traceback.print_exc()
-    finally:
-        print(f"🛑 Audio processor thread stopped for {stream_id}")
+    print(f"🛑 Audio processor thread stopped for {stream_id} after {session_count} sessions")
 
 @sock.route('/media-stream/<conference_name>/<participant_role>')
 def media_stream(ws, conference_name, participant_role):
