@@ -87,6 +87,7 @@ Once the webhook is configured, your translator will be fully operational!
 ## Recent Changes
 - **Nov 1, 2025**: ✅ **ULTRA-LOW LATENCY OPTIMIZATION COMPLETE**
   - ✅ Implemented TRUE streaming recognition (Google's streaming_recognize API)
+  - ✅ **FIXED 60-second timeout**: Automatic session restarts every 50 seconds for continuous listening
   - ✅ Non-blocking WebSocket architecture with audio queues
   - ✅ Reduced latency from 2 seconds to 500ms (4x faster)
   - ✅ Added interim results processing for even faster response
@@ -98,6 +99,7 @@ Once the webhook is configured, your translator will be fully operational!
   - ✅ Faster TTS speaking rate (1.15x) for quicker delivery
   - ✅ Lower confidence threshold (50%) for faster responses
   - ✅ Queue-based architecture prevents audio frame drops
+  - ✅ **Continuous listening**: Now works for calls of any length without interruption
   
 
 - **Oct 29, 2025**: ✅ **TRANSLATION FULLY ENABLED & OPERATIONAL**
